@@ -1,0 +1,43 @@
+# ========================
+# Node / NPM
+# ========================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ========================
+# Build outputs
+# ========================
+dist/
+build/
+.cache/
+.vite/
+*.local
+
+# ========================
+# Vite / React
+# ========================
+.vite-env.d.ts
+frontend/src/assets/react.svg
+frontend/public/vite.svg
+
+# ========================
+# Database
+# ========================
+db/fantasy.sqlite
+
+# ========================
+# OS files
+# ========================
+.DS_Store
+Thumbs.db
+
+# ========================
+# IDE / Editor configs
+# ========================
+.vscode/
+.idea/
+*.iml
+*.swp
