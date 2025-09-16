@@ -1,20 +1,22 @@
+require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
+const playersRoutes = require("./routes/playersRoutes");
+const teamsRoutes = require("./routes/teamsRoutes");
 
 const app = express();
 const PORT = 4000;
 
-//Middleware
 app.use(cors());
 app.use(express.json());
 
-//Endpoint de prueba
+app.use("/api/players", playersRoutes);
+app.use("/api/teams", teamsRoutes);
 
 app.get("/health", (req, res) => {
-  res.status(200).json({ status: "OK", message: "Server is healthy" });
+  res.json({ status: "ok", message: "Backend funcionando 🚀" });
 });
 
-//Iniciamos el servidor
 app.listen(PORT, () => {
-  console.log(`Server is running on http://localhost:${PORT}`);
+  console.log(`✅ Backend corriendo en http://localhost:${PORT}`);
 });
