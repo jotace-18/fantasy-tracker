@@ -15,7 +15,7 @@ app.use(express.json());
 app.use("/api/players", playersRoutes);
 app.use("/api/teams", teamsRoutes);
 app.use("/api/minimal-players", minimalPlayersRoutes);
-app.use("/api/scraper", scraperRoutes);
+app.use("/api", scraperRoutes);
 
 app.get("/health", (req, res) => {
   res.json({ status: "ok", message: "Backend funcionando 🚀" });

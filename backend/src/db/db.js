@@ -32,17 +32,19 @@ db.serialize(() => {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
       slug TEXT UNIQUE NOT NULL,
-      team_id INTEGER NOT NULL,
+      team INTEGER NOT NULL,
+      position TEXT,
       market_value TEXT,
       market_delta TEXT,
       market_max TEXT,
       market_min TEXT,
       risk_level INTEGER,
       risk_text TEXT,
-      last_updated DATETIME DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (team_id) REFERENCES teams(id)
+      last_updated DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `);
+
+  
 
   // Crear tabla de puntos (si no existe)
   db.run(`
@@ -67,10 +69,20 @@ db.serialize(() => {
   )
 `);
 
+db.run(`
+    CREATE TABLE IF NOT EXISTS player_market_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      player_id INTEGER NOT NULL,
+      date DATE NOT NULL,
+      value INTEGER NOT NULL,
+      delta INTEGER,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (player_id) REFERENCES players(id),
+      UNIQUE(player_id, date)
+    )
+  `);
 
-  // Índices útiles
-  db.run(`CREATE UNIQUE INDEX IF NOT EXISTS idx_players_team_slug ON players(team_id, slug)`);
-  db.run(`CREATE INDEX IF NOT EXISTS idx_players_team_id ON players(team_id)`);
+
 });
 
 module.exports = db;
