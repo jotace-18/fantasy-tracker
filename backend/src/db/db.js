@@ -58,12 +58,15 @@ db.serialize(() => {
   `);
 
   db.run(`
-    CREATE TABLE IF NOT EXISTS minimal_players (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT NOT NULL,
-      slug TEXT UNIQUE NOT NULL
-    )
-  `);
+  CREATE TABLE IF NOT EXISTS minimal_players (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    slug TEXT UNIQUE NOT NULL,
+    team TEXT NOT NULL,
+    position TEXT
+  )
+`);
+
 
   // Índices útiles
   db.run(`CREATE UNIQUE INDEX IF NOT EXISTS idx_players_team_slug ON players(team_id, slug)`);
