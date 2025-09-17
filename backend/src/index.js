@@ -3,6 +3,8 @@ const express = require("express");
 const cors = require("cors");
 const playersRoutes = require("./routes/playersRoutes");
 const teamsRoutes = require("./routes/teamsRoutes");
+const minimalPlayersRoutes = require("./routes/minimalPlayersRoutes");
+const scraperRoutes = require("./routes/scraperRoutes");
 
 const app = express();
 const PORT = 4000;
@@ -12,6 +14,8 @@ app.use(express.json());
 
 app.use("/api/players", playersRoutes);
 app.use("/api/teams", teamsRoutes);
+app.use("/api/minimal-players", minimalPlayersRoutes);
+app.use("/api/scraper", scraperRoutes);
 
 app.get("/health", (req, res) => {
   res.json({ status: "ok", message: "Backend funcionando 🚀" });

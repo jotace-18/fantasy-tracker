@@ -18,3 +18,13 @@ export const getPlayersByTeam = async (teamId: number) =>
 // añade equipos en bulk
 export const importTeams = async (names: string[]) =>
   (await axios.post(`${API}/teams/import`, { names })).data;
+
+// ==== Minimal Players ====
+export const getMinimalPlayers = async () =>
+  (await axios.get(`${API}/minimal-players`)).data;
+
+export const addMinimalPlayer = async (name: string) =>
+  (await axios.post(`${API}/minimal-players`, { name })).data;
+
+export const deleteMinimalPlayer = async (id: number) =>
+  (await axios.delete(`${API}/minimal-players/${id}`)).data;

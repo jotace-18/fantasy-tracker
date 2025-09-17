@@ -1,40 +1,25 @@
-const Svc = require("../services/playersService");
+const S = require("../services/playersService");
 
-function getPlayers(req, res) {
-  Svc.listPlayers((err, rows) => {
-    if (err) return res.status(500).json({ error: err.message });
-    res.json(rows);
-  });
-}
-
-function postPlayer(req, res) {
-  Svc.addPlayer(req.body, (err, player) => {
-    if (err) return res.status(400).json({ error: err.message });
-    res.json(player);
-  });
-}
-
-function putPlayer(req, res) {
-  const id = Number(req.params.id);
-  Svc.patchPlayer(id, req.body, (err, r) => {
+function addPlayerMinimal(req, res) {
+  S.addPlayerName(req.body, (err, r) => {
     if (err) return res.status(400).json({ error: err.message });
     res.json(r);
   });
 }
 
-function postRefresh(req, res) {
-  Svc.refreshPlayers((err, r) => {
-    if (err) return res.status(500).json({ error: err.message });
-    res.json({ message: "Refresco completado", ...r });
+function addPlayersBulk(req, res) {
+  S.addPlayerNamesBulk(req.body, (err, r) => {
+    if (err) return res.status(400).json({ error: err.message });
+    res.json(r);
   });
 }
 
-function getStats(req, res) {
-  const id = Number(req.params.id);
-  Svc.getPlayerStats(id, (err, rows) => {
+function listPlayersByTeam(req, res) {
+  const teamId = Number(req.params.teamId);
+  S.listPlayersByTeam(teamId, (err, rows) => {
     if (err) return res.status(500).json({ error: err.message });
     res.json(rows);
   });
 }
 
-module.exports = { getPlayers, postPlayer, putPlayer, postRefresh, getStats };
+module.exports = { addPlayerMinimal, addPlayersBulk, listPlayersByTeam };

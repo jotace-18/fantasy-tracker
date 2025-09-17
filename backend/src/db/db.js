@@ -26,14 +26,42 @@ db.serialize(() => {
     )
   `);
 
-  // Tabla mínima de jugadores
+  // Crear de nuevo con todos los campos necesarios
   db.run(`
     CREATE TABLE IF NOT EXISTS players (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
-      slug TEXT,
+      slug TEXT UNIQUE NOT NULL,
       team_id INTEGER NOT NULL,
-      FOREIGN KEY(team_id) REFERENCES teams(id)
+      market_value TEXT,
+      market_delta TEXT,
+      market_max TEXT,
+      market_min TEXT,
+      risk_level INTEGER,
+      risk_text TEXT,
+      last_updated DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (team_id) REFERENCES teams(id)
+    )
+  `);
+
+  // Crear tabla de puntos (si no existe)
+  db.run(`
+    CREATE TABLE IF NOT EXISTS player_points (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      player_id INTEGER NOT NULL,
+      jornada INTEGER NOT NULL,
+      points INTEGER,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (player_id) REFERENCES players(id),
+      UNIQUE(player_id, jornada)
+    )
+  `);
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS minimal_players (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      slug TEXT UNIQUE NOT NULL
     )
   `);
 
