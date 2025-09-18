@@ -1,64 +1,35 @@
 import { useEffect, useState } from "react";
+import { useParams, Link } from "react-router-dom";
 import {
-  Table, Thead, Tbody, Tr, Th, Td,
-  TableContainer, Box, Spinner, Text, Button, HStack
+  Box, Spinner, Text,
+  Table, Thead, Tbody, Tr, Th, Td, TableContainer
 } from "@chakra-ui/react";
-import { Link } from "react-router-dom"; // ⬅️ importar Link
 
-function PlayersPage() {
+function TeamDetailPage() {
+  const { id } = useParams();
   const [players, setPlayers] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [page, setPage] = useState(1);
-  const [total, setTotal] = useState(0);
   const [sortBy, setSortBy] = useState("total_points");
   const [order, setOrder] = useState("DESC");
-  const limit = 20;
 
   useEffect(() => {
     setLoading(true);
-    fetch(
-      `http://localhost:4000/api/players/top?page=${page}&limit=${limit}&sortBy=${sortBy}&order=${order}`
-    )
+    fetch(`http://localhost:4000/api/teams/${id}/players?sortBy=${sortBy}&order=${order}`)
       .then((res) => res.json())
       .then((data) => {
-        setPlayers(data.players);
-        setTotal(data.total);
+        if (Array.isArray(data)) {
+          setPlayers(data);
+        } else {
+          setPlayers([]);
+        }
         setLoading(false);
       })
       .catch((err) => {
-        console.error("❌ Error al cargar jugadores:", err);
+        console.error("❌ Error al cargar jugadores del equipo:", err);
+        setPlayers([]);
         setLoading(false);
       });
-  }, [page, sortBy, order]);
-
-  const totalPages = Math.ceil(total / limit);
-
-  const getRankIcon = (index) => {
-    const rank = (page - 1) * limit + index + 1;
-    if (rank === 1) return "🥇";
-    if (rank === 2) return "🥈";
-    if (rank === 3) return "🥉";
-    return `#${rank}`;
-  };
-
-  const renderPageNumbers = () => {
-    let pages = [];
-    const start = Math.max(1, page - 3);
-    const end = Math.min(totalPages, page + 3);
-
-    for (let i = start; i <= end; i++) {
-      pages.push(
-        <Button
-          key={i}
-          onClick={() => setPage(i)}
-          colorScheme={page === i ? "teal" : "gray"}
-        >
-          {i}
-        </Button>
-      );
-    }
-    return pages;
-  };
+  }, [id, sortBy, order]);
 
   const handleSort = (field, defaultOrder = "ASC") => {
     if (sortBy === field) {
@@ -86,20 +57,18 @@ function PlayersPage() {
   return (
     <Box p={6}>
       <Text fontSize="2xl" fontWeight="bold" mb={4}>
-        Ranking de Jugadores
+        Jugadores del equipo #{id}
       </Text>
       <TableContainer>
-        <Table variant="striped" colorScheme="teal">
+        <Table variant="striped" colorScheme="teal" size="sm">
           <Thead>
             <Tr>
-              <Th>Posición</Th>
               <Th cursor="pointer" onClick={() => handleSort("name", "ASC")}>
                 Nombre{renderArrow("name")}
               </Th>
-              <Th cursor="pointer" onClick={() => handleSort("team_name", "ASC")}>
-                Equipo{renderArrow("team_name")}
+              <Th cursor="pointer" onClick={() => handleSort("position", "ASC")}>
+                Posición{renderArrow("position")}
               </Th>
-              <Th>Posición en campo</Th>
               <Th
                 isNumeric
                 cursor="pointer"
@@ -112,20 +81,18 @@ function PlayersPage() {
                 cursor="pointer"
                 onClick={() => handleSort("total_points", "DESC")}
               >
-                Puntos{renderArrow("total_points")}
+                Puntos Totales{renderArrow("total_points")}
               </Th>
             </Tr>
           </Thead>
           <Tbody>
-            {players.map((player, index) => (
+            {players.map((player) => (
               <Tr key={player.id}>
-                <Td>{getRankIcon(index)}</Td>
                 <Td>
                   <Link to={`/players/${player.id}`} style={{ color: "teal", fontWeight: "bold" }}>
                     {player.name}
                   </Link>
                 </Td>
-                <Td>{player.team_name}</Td>
                 <Td>{player.position}</Td>
                 <Td isNumeric>
                   {typeof player.market_value_num === "number" && !isNaN(player.market_value_num)
@@ -143,29 +110,8 @@ function PlayersPage() {
           </Tbody>
         </Table>
       </TableContainer>
-
-      <HStack justify="center" mt={6} spacing={2}>
-        <Button onClick={() => setPage(1)} isDisabled={page === 1}>
-          ⏮ Primero
-        </Button>
-        <Button onClick={() => setPage((p) => Math.max(p - 1, 1))} isDisabled={page === 1}>
-          ◀ Anterior
-        </Button>
-
-        {renderPageNumbers()}
-
-        <Button
-          onClick={() => setPage((p) => Math.min(p + 1, totalPages))}
-          isDisabled={page === totalPages}
-        >
-          Siguiente ▶
-        </Button>
-        <Button onClick={() => setPage(totalPages)} isDisabled={page === totalPages}>
-          Último ⏭
-        </Button>
-      </HStack>
     </Box>
   );
 }
 
-export default PlayersPage;
+export default TeamDetailPage;

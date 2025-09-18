@@ -1,5 +1,6 @@
-// src/pages/Teams.jsx
+// src/pages/TeamsPage.jsx
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import {
   Table, Thead, Tbody, Tr, Th, Td,
   TableContainer, Box, Spinner, Text, Badge
@@ -14,7 +15,6 @@ function TeamsPage() {
     fetch("http://localhost:4000/api/teams")
       .then((res) => res.json())
       .then((data) => {
-        // 🔹 ordenar por posición ascendente
         const sorted = [...data].sort((a, b) => {
           if (a.position == null) return 1;
           if (b.position == null) return -1;
@@ -38,12 +38,11 @@ function TeamsPage() {
     );
   }
 
-  // 🔹 función para devolver el color del badge según posición
   const getBadgeColor = (pos) => {
     if (!pos) return "gray";
     if (pos >= 1 && pos <= 4) return "green";
     if (pos === 5 || pos === 6) return "yellow";
-    if (pos >= teams.length - 2) return "red"; // últimos 3
+    if (pos >= teams.length - 2) return "red";
     return "blue";
   };
 
@@ -79,18 +78,14 @@ function TeamsPage() {
                     {team.position ?? "-"}
                   </Badge>
                 </Td>
-                <Td fontWeight="medium">{team.name}</Td>
+                <Td fontWeight="medium">
+                  <Link to={`/teams/${team.id}`}>{team.name}</Link>
+                </Td>
                 <Td isNumeric>{team.points ?? "-"}</Td>
                 <Td isNumeric>{team.played ?? "-"}</Td>
-                <Td isNumeric color="green.600">
-                  {team.won ?? "-"}
-                </Td>
-                <Td isNumeric color="yellow.600">
-                  {team.drawn ?? "-"}
-                </Td>
-                <Td isNumeric color="red.600">
-                  {team.lost ?? "-"}
-                </Td>
+                <Td isNumeric color="green.600">{team.won ?? "-"}</Td>
+                <Td isNumeric color="yellow.600">{team.drawn ?? "-"}</Td>
+                <Td isNumeric color="red.600">{team.lost ?? "-"}</Td>
                 <Td isNumeric>{team.gf ?? "-"}</Td>
                 <Td isNumeric>{team.ga ?? "-"}</Td>
                 <Td

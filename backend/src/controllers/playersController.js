@@ -36,6 +36,35 @@ const getTopPlayers = async (req, res) => {
   }
 };
 
+const getPlayersByTeamSlug = async (req, res) => {
+  try {
+    const { slug } = req.params;
+    console.log(`🛰️ [Controller] /teams/${slug}/players`);
+
+    const players = await playersService.fetchPlayersByTeamSlug(slug);
+    res.json(players);
+  } catch (error) {
+    console.error("❌ [Controller] getPlayersByTeamSlug:", error.message);
+    res.status(500).json({ error: "Error al obtener jugadores del equipo" });
+  }
+};
+
+const getPlayerById = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const player = await playersService.fetchPlayerById(id);
+
+    if (!player) {
+      return res.status(404).json({ error: "Jugador no encontrado" });
+    }
+
+    res.json(player);
+  } catch (err) {
+    console.error("❌ [Controller] getPlayerById:", err.message);
+    res.status(500).json({ error: "Error al obtener detalle del jugador" });
+  }
+};
 
 
-module.exports = { addPlayerMinimal, addPlayersBulk, listPlayersByTeam, getTopPlayers };
+
+module.exports = { addPlayerMinimal, addPlayersBulk, listPlayersByTeam, getTopPlayers, getPlayersByTeamSlug, getPlayerById };

@@ -45,5 +45,10 @@ router.put("/:id/team", (req, res) => {
 // GET /api/players/top
 router.get("/top", playersController.getTopPlayers);
 
+router.get("/teams/:slug/players", playersController.getPlayersByTeamSlug);
+
+router.get("/:id", playersController.getPlayerById);
+
+
 
 module.exports = router;

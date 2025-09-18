@@ -40,4 +40,12 @@ const fetchTopPlayersPaginated = async (page, limit, sortBy, order) => {
   return await playersModel.findTopPlayersPaginated(page, limit, sortBy, order);
 };
 
-module.exports = { addPlayerName, addPlayerNamesBulk, listPlayersByTeam, fetchTopPlayersPaginated };
+const fetchPlayersByTeamSlug = async (teamSlug) => {
+  return await playersModel.findPlayersByTeamSlug(teamSlug);
+};
+
+const fetchPlayerById = async (id) => {
+  return await playersModel.findPlayerById(id);
+};
+
+module.exports = { addPlayerName, addPlayerNamesBulk, listPlayersByTeam, fetchTopPlayersPaginated, fetchPlayersByTeamSlug, fetchPlayerById };

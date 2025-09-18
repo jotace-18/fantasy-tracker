@@ -4,12 +4,14 @@ const cheerio = require("cheerio");
 const db = require("../db/db");
 const pLimit = require("p-limit").default;
 
+// 🔹 fecha mínima permitida
+const MIN_DATE = new Date("2025-08-21");
+
 /* -------------------------- SCRAPER DE EQUIPOS ------------------------- */
 async function scrapeTeams() {
   console.log("🏆 Scrapeando clasificación de equipos...");
   const url = "https://www.laliga.com/laliga-easports/clasificacion";
 
-  // 🔹 Limpiar columnas de estadísticas (sin tocar id, name, short_name ni slug)
   await new Promise((res, rej) => {
     db.run(
       `
@@ -34,12 +36,10 @@ async function scrapeTeams() {
     const { data } = await axios.get(url, { timeout: 15000 });
     const $ = cheerio.load(data);
 
-    // Dedupe → quedarse con la fila con más partidos jugados (played)
     const byName = new Map();
 
     $(".styled__StandingTabBody-sc-e89col-0").each((_, el) => {
       const cols = $(el).find("div.styled__Td-sc-e89col-10");
-
       const position = parseInt($(cols[0]).text().trim(), 10);
       const shortName = $(el).find(".shield-mobile p").text().trim();
       const name = $(el).find(".shield-desktop p").text().trim();
@@ -110,7 +110,7 @@ async function scrapeTeams() {
   }
 }
 
-/* --------------------- SCRAPER DE JUGADORES CON p-limit --------------------- */
+/* --------------------- SCRAPER DE JUGADORES --------------------- */
 async function scrapeAllMinimalPlayers() {
   return new Promise((resolve, reject) => {
     db.all("SELECT * FROM minimal_players", async (err, rows) => {
@@ -126,7 +126,6 @@ async function scrapeAllMinimalPlayers() {
       const results = [];
       let processed = 0;
 
-      // función auxiliar
       async function processPlayer(p) {
         console.log(`\n🔄 Procesando jugador: ${p.name} (${p.slug})`);
         const url = `https://www.futbolfantasy.com/jugadores/${p.slug}`;
@@ -135,7 +134,7 @@ async function scrapeAllMinimalPlayers() {
           const { data } = await axios.get(url, { timeout: 15000 });
           const $ = cheerio.load(data);
 
-          // === ID interno externo (futbolfantasy)
+          // === ID externo
           let playerIdExternal = null;
           const marketUrl = $("select.select_radius option")
             .filter((_, el) => $(el).text().toLowerCase().includes("laliga fantasy oficial"))
@@ -167,7 +166,7 @@ async function scrapeAllMinimalPlayers() {
             if (match) riskLevel = parseInt(match[1], 10);
           }
 
-          // === Buscar team_id
+          // === team_id
           let teamId = null;
           await new Promise((res, rej) => {
             db.get("SELECT id FROM teams WHERE slug = ?", [p.team], (err, row) => {
@@ -190,15 +189,22 @@ async function scrapeAllMinimalPlayers() {
             marketValue = firstRow.find(".col-4").text().trim() || null;
 
             $m("#dataTable .row").not(".font-weight-bold").each((_, el) => {
-              const date = $m(el).find(".col-3").text().trim();
+              const rawDate = $m(el).find(".col-3").text().trim(); // ej "21/08"
               const valText = $m(el).find(".col-4").text().trim();
               const d = $m(el).find(".col-5 span").text().trim();
               const val = parseInt(valText.replace(/\./g, ""), 10);
 
-              if (date && !isNaN(val)) {
-                marketHistory.push({ date, value: val, delta: d || null });
-                if (maxValue === null || val > maxValue) maxValue = val;
-                if (minValue === null || val < minValue) minValue = val;
+              if (rawDate && !isNaN(val)) {
+                const [day, month] = rawDate.split("/");
+                const normDate = new Date(`2025-${month.padStart(2, "0")}-${day.padStart(2, "0")}`);
+
+                if (normDate >= MIN_DATE) {
+                  const dateStr = normDate.toISOString().split("T")[0];
+                  marketHistory.push({ date: dateStr, value: val, delta: d || null });
+
+                  if (maxValue === null || val > maxValue) maxValue = val;
+                  if (minValue === null || val < minValue) minValue = val;
+                }
               }
             });
           }
@@ -208,7 +214,7 @@ async function scrapeAllMinimalPlayers() {
             return;
           }
 
-          // === Guardar jugador y recuperar ID interno SQLite
+          // === Guardar jugador
           let playerIdDb;
           await new Promise((res, rej) => {
             db.run(
@@ -233,7 +239,6 @@ async function scrapeAllMinimalPlayers() {
                   playerIdDb = this.lastID;
                   return res();
                 }
-                // Si fue un UPDATE, buscar ID por slug
                 db.get("SELECT id FROM players WHERE slug = ?", [p.slug], (err2, row) => {
                   if (!err2 && row) playerIdDb = row.id;
                   res();
@@ -242,7 +247,7 @@ async function scrapeAllMinimalPlayers() {
             );
           });
 
-          // === Guardar histórico mercado
+          // === Guardar histórico filtrado
           for (const mh of marketHistory) {
             await new Promise((res, rej) => {
               db.run(
@@ -285,8 +290,7 @@ async function scrapeAllMinimalPlayers() {
         }
       }
 
-      // 👉 Concurrencia controlada con p-limit
-      const limit = pLimit(15); // ajusta este nº según tu CPU/RAM
+      const limit = pLimit(15);
       await Promise.all(rows.map((p) => limit(() => processPlayer(p))));
 
       console.log("\n=== Scraping completado ===");
