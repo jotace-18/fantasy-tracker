@@ -1,17 +1,17 @@
 const express = require("express");
 const router = express.Router();
-const C = require("../controllers/playersController");
+const playersController = require("../controllers/playersController");
 
 // Alta mínima de un jugador (nombre + teamName [+ slug opcional])
 // body: { name: string, teamName: string, slug?: string }
-router.post("/minimal", C.addPlayerMinimal);
+router.post("/minimal", playersController.addPlayerMinimal);
 
 // Alta masiva mínima por equipo (ideal para pegar lista de nombres)
 // body: { teamName: string, names: string[] }
-router.post("/minimal/bulk", C.addPlayersBulk);
+router.post("/minimal/bulk", playersController.addPlayersBulk);
 
 // Listar jugadores por equipo
-router.get("/team/:teamId", C.listPlayersByTeam);
+router.get("/team/:teamId", playersController.listPlayersByTeam);
 
 
 // PUT /api/players/:id/team
@@ -40,5 +40,10 @@ router.put("/:id/team", (req, res) => {
     }
   );
 });
+
+
+// GET /api/players/top
+router.get("/top", playersController.getTopPlayers);
+
 
 module.exports = router;
