@@ -6,6 +6,7 @@ import TeamsPage from "../pages/TeamsPage";
 import Analysis from "../pages/Analysis";
 import TeamDetailPage from "../pages/TeamDetailPage";
 import PlayerDetailPage from "../pages/PlayerDetailPage";
+import MyTeamPage from "../pages/MyTeamPage";
 
 export default function AppRouter() {
   return (
@@ -18,6 +19,7 @@ export default function AppRouter() {
           <Route path="/analysis" element={<Analysis />} />
           <Route path="/teams/:id" element={<TeamDetailPage />} />
           <Route path="/players/:id" element={<PlayerDetailPage />} />
+          <Route path="/my-team" element={<MyTeamPage />} />
         </Routes>
       </Layout>
     </BrowserRouter>

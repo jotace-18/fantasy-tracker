@@ -5,6 +5,7 @@ const playersRoutes = require("./routes/playersRoutes");
 const teamsRoutes = require("./routes/teamsRoutes");
 const minimalPlayersRoutes = require("./routes/minimalPlayersRoutes");
 const scraperRoutes = require("./routes/scraperRoutes");
+const userRoutes = require("./routes/userRoutes");
 
 const app = express();
 const PORT = 4000;
@@ -16,6 +17,8 @@ app.use("/api/players", playersRoutes);
 app.use("/api/teams", teamsRoutes);
 app.use("/api/minimal-players", minimalPlayersRoutes);
 app.use("/api", scraperRoutes);
+app.use("/api/user", userRoutes);
+
 
 app.get("/health", (req, res) => {
   res.json({ status: "ok", message: "Backend funcionando 🚀" });
