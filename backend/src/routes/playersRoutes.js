@@ -47,7 +47,14 @@ router.get("/top", playersController.getTopPlayers);
 
 router.get("/teams/:slug/players", playersController.getPlayersByTeamSlug);
 
+router.get("/search", (req, res, next) => {
+  console.log("✅ GET /api/players/search hit");
+  return playersController.searchPlayers(req, res, next);
+});
+
+
 router.get("/:id", playersController.getPlayerById);
+
 
 
 

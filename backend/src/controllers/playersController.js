@@ -20,7 +20,7 @@ function listPlayersByTeam(req, res) {
     if (err) return res.status(500).json({ error: err.message });
     res.json(rows);
   });
-};
+}
 
 const getTopPlayers = async (req, res) => {
   try {
@@ -65,6 +65,27 @@ const getPlayerById = async (req, res) => {
   }
 };
 
+async function searchPlayers(req, res) {
+  try {
+    console.log("✅ GET /api/players/search hit");
+    console.log("🔎 Query recibida:", req.query);
 
+    const result = await playersService.searchPlayers(req.query);
 
-module.exports = { addPlayerMinimal, addPlayersBulk, listPlayersByTeam, getTopPlayers, getPlayersByTeamSlug, getPlayerById };
+    console.log(`📊 Resultados devueltos: ${result.data.length}`);
+    return res.json(result); // devuelve { data, page, limit, total }
+  } catch (err) {
+    console.error("❌ Error en búsqueda de jugadores:", err.message);
+    res.status(500).json({ error: "Error buscando jugadores" });
+  }
+}
+
+module.exports = { 
+  addPlayerMinimal, 
+  addPlayersBulk, 
+  listPlayersByTeam, 
+  getTopPlayers, 
+  getPlayersByTeamSlug, 
+  getPlayerById, 
+  searchPlayers 
+};

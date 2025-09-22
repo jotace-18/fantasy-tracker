@@ -48,4 +48,57 @@ const fetchPlayerById = async (id) => {
   return await playersModel.findPlayerById(id);
 };
 
-module.exports = { addPlayerName, addPlayerNamesBulk, listPlayersByTeam, fetchTopPlayersPaginated, fetchPlayersByTeamSlug, fetchPlayerById };
+function normalize(str) {
+  return str
+    ?.normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
+async function searchPlayers(query) {
+  const {
+    name = "",
+    team_id: teamId,
+    sort = "market_value",
+    order = "DESC",
+    limit = 20,
+    page = 1,
+  } = query;
+
+  if (!name && !teamId) {
+    return [];
+  }
+
+  // 🔎 Normalizamos aquí
+  const normalizedName = name ? normalize(name) : "";
+
+  const validSortCols = ["name", "market_value", "market_max", "market_min", "risk_level"];
+  const validSort = validSortCols.includes(sort) ? sort : "market_value";
+
+  const validOrder = ["ASC", "DESC"].includes(order?.toUpperCase())
+    ? order.toUpperCase()
+    : "DESC";
+
+  const lim = Math.min(Number(limit) || 20, 100);
+  const pg = Math.max(Number(page) || 1, 1);
+  const offset = (pg - 1) * lim;
+
+  const rows = await playersModel.searchPlayers({
+    name: normalizedName, // 👈 se pasa ya normalizado
+    teamId,
+    sort: validSort,
+    order: validOrder,
+    limit: lim,
+    offset,
+  });
+
+  return {
+    data: rows,
+    page: pg,
+    limit: lim,
+    total: rows.length,
+  };
+}
+
+module.exports = { addPlayerName, addPlayerNamesBulk, listPlayersByTeam, fetchTopPlayersPaginated, fetchPlayersByTeamSlug, fetchPlayerById, searchPlayers };

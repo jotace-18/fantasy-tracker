@@ -205,5 +205,56 @@ const findPlayerById = (id) => {
   });
 };
 
+function searchPlayers({ name, teamId, sort, order, limit, offset }) {
+  return new Promise((resolve, reject) => {
+    let sql = `
+      SELECT 
+        p.id, 
+        p.name, 
+        p.position, 
+        p.market_value, 
+        p.market_delta,
+        p.market_max, 
+        p.market_min, 
+        p.risk_level,
+        p.team_id, 
+        t.name AS team_name,
+        CAST(REPLACE(REPLACE(p.market_value, '.', ''), ',', '') AS INTEGER) AS market_value_num
+      FROM players p
+      LEFT JOIN teams t ON p.team_id = t.id
+      WHERE 1=1
+    `;
+    const params = [];
 
-module.exports = { insertPlayerMinimal, bulkInsertPlayersMinimal, getPlayersByTeamId, findTopPlayersPaginated, findPlayersByTeamSlug, findPlayerById };
+    if (name) {
+      sql += " AND p.name_normalized LIKE ?";
+      params.push(`%${name}%`); // <- name ya viene normalizado desde el service
+    }
+    if (teamId) {
+      sql += " AND p.team_id = ?";
+      params.push(teamId);
+    }
+
+    sql += ` ORDER BY p.${sort} ${order} LIMIT ? OFFSET ?`;
+    params.push(Number(limit), Number(offset));
+
+    console.log("📝 SQL ejecutada:", sql);
+    console.log("📦 Parámetros:", params);
+
+    db.all(sql, params, (err, rows) => {
+      if (err) {
+        console.error("❌ Error en searchPlayers:", err.message);
+        reject(err);
+      } else {
+        console.log("📊 Filas encontradas:", rows.length);
+        resolve(rows || []);
+      }
+    });
+  });
+}
+
+
+
+
+
+module.exports = { insertPlayerMinimal, bulkInsertPlayersMinimal, getPlayersByTeamId, findTopPlayersPaginated, findPlayersByTeamSlug, findPlayerById, searchPlayers };
