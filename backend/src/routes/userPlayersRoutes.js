@@ -11,8 +11,7 @@ router.delete("/:teamId/:playerId", userPlayersController.removePlayer);
 // Listar jugadores de un equipo
 router.get("/:teamId", userPlayersController.listPlayers);
 
-// Actualizar status (XI / B / R)
+// Actualizar status y/o slot
 router.put("/:teamId/:playerId/status", userPlayersController.updateStatus);
-
 
 module.exports = router;

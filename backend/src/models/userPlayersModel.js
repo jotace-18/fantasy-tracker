@@ -5,9 +5,9 @@ exports.addPlayer = (teamId, { player_id, buy_price }) => {
     const today = new Date().toISOString().split("T")[0];
     db.run(
       `INSERT INTO user_players 
-       (user_team_id, player_id, buy_price, buy_date, status) 
-       VALUES (?, ?, ?, ?, ?)`,
-      [teamId, player_id, buy_price || 0, today, "R"], // 👈 status por defecto
+       (user_team_id, player_id, buy_price, buy_date, status, slot_index) 
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [teamId, player_id, buy_price || 0, today, "R", null], // status por defecto "R", slot vacío
       function (err) {
         if (err) reject(err);
         else
@@ -18,12 +18,12 @@ exports.addPlayer = (teamId, { player_id, buy_price }) => {
             buy_price,
             buy_date: today,
             status: "R",
+            slot_index: null,
           });
       }
     );
   });
 };
-
 
 exports.removePlayer = (teamId, playerId) => {
   return new Promise((resolve, reject) => {
@@ -48,6 +48,7 @@ exports.listPlayers = (teamId) => {
         up.buy_price,
         up.buy_date,
         up.status,
+        up.slot_index,
         p.name,
         p.position,
         CASE p.position
@@ -55,7 +56,7 @@ exports.listPlayers = (teamId) => {
           WHEN 'Defensa' THEN 'DEF'
           WHEN 'Mediocampista' THEN 'MID'
           WHEN 'Delantero' THEN 'FWD'
-          END AS role,
+        END AS role,
         p.market_value,
         CAST(REPLACE(REPLACE(p.market_value, '.', ''), ',', '') AS INTEGER) AS market_value_num,
         t.name AS team_name,
@@ -77,16 +78,17 @@ exports.listPlayers = (teamId) => {
   });
 };
 
-exports.updateStatus = (teamId, playerId, status) => {
+exports.updateStatus = (teamId, playerId, { status, slot_index }) => {
   return new Promise((resolve, reject) => {
     db.run(
       `UPDATE user_players 
-       SET status = ? 
+       SET status = COALESCE(?, status),
+           slot_index = COALESCE(?, slot_index)
        WHERE user_team_id = ? AND player_id = ?`,
-      [status, teamId, playerId],
+      [status, slot_index, teamId, playerId],
       function (err) {
         if (err) reject(err);
-        else resolve({ success: this.changes > 0, playerId, status });
+        else resolve({ success: this.changes > 0, playerId, status, slot_index });
       }
     );
   });

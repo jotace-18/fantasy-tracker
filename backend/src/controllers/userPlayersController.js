@@ -29,12 +29,10 @@ exports.listPlayers = async (req, res) => {
 
 exports.updateStatus = async (req, res) => {
   try {
-    const { status } = req.body;
     const { teamId, playerId } = req.params;
-    const result = await userPlayersService.updateStatus(teamId, playerId, status);
+    const result = await userPlayersService.updateStatus(teamId, playerId, req.body);
     res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 };
-

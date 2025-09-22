@@ -214,7 +214,7 @@ export default function MyTeamPage() {
     fetchMyPlayers();
   }, []);
 
-  // Jugadores ordenados
+  // Jugadores ordenados (para lista lateral)
   const orderedPlayers = [...myPlayers].sort((a, b) => {
     const posOrder = { GK: 1, DEF: 2, MID: 3, FWD: 4 };
     if (posOrder[a.role] !== posOrder[b.role]) {
@@ -247,22 +247,28 @@ export default function MyTeamPage() {
     }
   };
 
-  // Handler para asignar jugador al XI
+  // Handler para asignar jugador al XI en un slot concreto
   const handleSetXI = async (player) => {
     try {
       const teamId = 1;
-      await fetch(
-        `http://localhost:4000/api/user-players/${teamId}/${player.player_id}`,
+      const res = await fetch(
+        `http://localhost:4000/api/user-players/${teamId}/${player.player_id}/status`,
         {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ status: "XI" }),
+          body: JSON.stringify({
+            status: "XI",
+            slot_index: selectedSlot?.index, // guardamos el hueco exacto
+          }),
         }
       );
+      if (!res.ok) throw new Error("Error al actualizar status");
 
       setMyPlayers((prev) =>
         prev.map((pl) =>
-          pl.player_id === player.player_id ? { ...pl, status: "XI" } : pl
+          pl.player_id === player.player_id
+            ? { ...pl, status: "XI", slot_index: selectedSlot?.index }
+            : pl
         )
       );
 
@@ -314,10 +320,13 @@ export default function MyTeamPage() {
                 y={p.y}
                 index={i + 1}
                 player={orderedPlayers.find(
-                  (pl) => pl.status === "XI" && pl.role === p.role
+                  (pl) =>
+                    pl.status === "XI" &&
+                    pl.role === p.role &&
+                    pl.slot_index === i + 1 // 👈 solo ocupa su hueco
                 )}
                 onSelectSlot={() => {
-                  setSelectedSlot(p);
+                  setSelectedSlot({ ...p, index: i + 1 });
                   onLineupOpen();
                 }}
               />
@@ -401,7 +410,9 @@ export default function MyTeamPage() {
       <Modal isOpen={isLineupOpen} onClose={onLineupClose} size="lg">
         <ModalOverlay />
         <ModalContent>
-          <ModalHeader>Elige jugador para {selectedSlot?.role}</ModalHeader>
+          <ModalHeader>
+            Elige jugador para {selectedSlot?.role} (slot {selectedSlot?.index})
+          </ModalHeader>
           <ModalCloseButton />
           <ModalBody>
             <VStack spacing={2} align="stretch">
@@ -467,6 +478,7 @@ function PlayerSlot({ role, index, x, y, player, isBench, onSelectSlot }) {
     </Center>
   );
 }
+
 
 
 
