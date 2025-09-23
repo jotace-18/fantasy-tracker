@@ -3,27 +3,41 @@ const db = require("../db/db");
 exports.addPlayer = (teamId, { player_id, buy_price }) => {
   return new Promise((resolve, reject) => {
     const today = new Date().toISOString().split("T")[0];
-    db.run(
-      `INSERT INTO user_players 
-       (user_team_id, player_id, buy_price, buy_date, status, slot_index) 
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [teamId, player_id, buy_price || 0, today, "R", null], // status por defecto "R", slot vacío
-      function (err) {
-        if (err) reject(err);
-        else
-          resolve({
-            id: this.lastID,
-            teamId,
-            player_id,
-            buy_price,
-            buy_date: today,
-            status: "R",
-            slot_index: null,
-          });
+
+    // ⚡ Primero comprobar si ya existe
+    db.get(
+      `SELECT id FROM user_players WHERE user_team_id = ? AND player_id = ?`,
+      [teamId, player_id],
+      (err, row) => {
+        if (err) return reject(err);
+        if (row) {
+          return reject(new Error("El jugador ya está en tu plantilla"));
+        }
+
+        // Si no existe, lo insertamos
+        db.run(
+          `INSERT INTO user_players 
+           (user_team_id, player_id, buy_price, buy_date, status) 
+           VALUES (?, ?, ?, ?, ?)`,
+          [teamId, player_id, buy_price || 0, today, "R"], // status por defecto = Reserva
+          function (err2) {
+            if (err2) reject(err2);
+            else
+              resolve({
+                id: this.lastID,
+                teamId,
+                player_id,
+                buy_price,
+                buy_date: today,
+                status: "R",
+              });
+          }
+        );
       }
     );
   });
 };
+
 
 exports.removePlayer = (teamId, playerId) => {
   return new Promise((resolve, reject) => {

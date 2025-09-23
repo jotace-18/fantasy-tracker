@@ -1,3 +1,11 @@
+exports.updateFormation = async (req, res) => {
+  try {
+    const result = await userTeamsService.updateFormation(req.params.id, req.body.formation);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
 const userTeamsService = require("../services/userTeamsService");
 
 exports.createTeam = async (req, res) => {

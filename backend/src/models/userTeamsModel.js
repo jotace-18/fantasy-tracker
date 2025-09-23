@@ -1,3 +1,16 @@
+// Actualizar formación
+exports.updateFormation = (id, formation) => {
+  return new Promise((resolve, reject) => {
+    db.run(
+      `UPDATE user_teams SET formation = ? WHERE id = ?`,
+      [formation, id],
+      function (err) {
+        if (err) reject(err);
+        else resolve({ success: this.changes > 0 });
+      }
+    );
+  });
+};
 const db = require("../db/db");
 
 exports.createTeam = (data) => {
