@@ -186,7 +186,9 @@ async function scrapeAllMinimalPlayers() {
 
             const firstRow = $m("#dataTable .row").not(".font-weight-bold").first();
             delta = firstRow.find(".col-5 span").text().trim() || null;
-            marketValue = firstRow.find(".col-4").text().trim() || null;
+            // Guardar marketValue como entero (sin puntos ni comas)
+            const rawMarketValue = firstRow.find(".col-4").text().trim() || null;
+            marketValue = rawMarketValue ? String(rawMarketValue).replace(/\D/g, "") : null;
 
             $m("#dataTable .row").not(".font-weight-bold").each((_, el) => {
               const rawDate = $m(el).find(".col-3").text().trim(); // ej "21/08"
@@ -213,6 +215,8 @@ async function scrapeAllMinimalPlayers() {
             console.log(`⏭️ Saltando jugador sin market_value: ${p.name}`);
             return;
           }
+          // Convertir a número antes de guardar
+          marketValue = parseInt(marketValue, 10);
 
           let playerIdDb;
           await new Promise((res, rej) => {

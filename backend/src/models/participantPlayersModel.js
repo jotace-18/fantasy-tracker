@@ -3,9 +3,25 @@ const db = require("../db/db");
 // Obtener plantilla de un participante
 function getTeamByParticipantId(participantId, cb) {
   const query = `
-    SELECT pp.player_id, p.name, p.position, pp.status, pp.joined_at
+    SELECT 
+      pp.player_id, 
+      p.name, 
+      p.position, 
+      t.name AS team,
+      p.market_value,
+      CAST(REPLACE(REPLACE(p.market_value, '.', ''), ',', '') AS INTEGER) AS market_value_num,
+      pp.clause_value,
+      pp.is_clausulable,
+      (
+        SELECT IFNULL(SUM(points), 0)
+        FROM player_points
+        WHERE player_id = p.id
+      ) AS total_points,
+      pp.status, 
+      pp.joined_at
     FROM participant_players pp
     JOIN players p ON p.id = pp.player_id
+    JOIN teams t ON t.id = p.team_id
     WHERE pp.participant_id = ?
     ORDER BY 
       CASE pp.status 
@@ -59,4 +75,18 @@ module.exports = {
   addPlayerToTeam,
   updatePlayerStatus,
   removePlayerFromTeam,
+  updateClauseValue: function(participant_id, player_id, clause_value, cb) {
+    db.run(
+      `UPDATE participant_players SET clause_value = ? WHERE participant_id = ? AND player_id = ?`,
+      [clause_value, participant_id, player_id],
+      function(err) { cb && cb(err, { changes: this.changes }); }
+    );
+  },
+  updateClausulable: function(participant_id, player_id, is_clausulable, cb) {
+    db.run(
+      `UPDATE participant_players SET is_clausulable = ? WHERE participant_id = ? AND player_id = ?`,
+      [is_clausulable, participant_id, player_id],
+      function(err) { cb && cb(err, { changes: this.changes }); }
+    );
+  },
 };

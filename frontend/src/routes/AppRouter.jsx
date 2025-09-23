@@ -7,7 +7,10 @@ import Analysis from "../pages/Analysis";
 import TeamDetailPage from "../pages/TeamDetailPage";
 import PlayerDetailPage from "../pages/PlayerDetailPage";
 import MyTeamPage from "../pages/MyTeamPage";
+
 import LeaderboardPage from "../pages/LeaderboardPage";
+import CalendarPage from "../pages/CalendarPage";
+import ParticipantProfilePage from "../pages/ParticipantProfilePage";
 
 export default function AppRouter() {
   return (
@@ -22,7 +25,9 @@ export default function AppRouter() {
           <Route path="/players/:id" element={<PlayerDetailPage />} />
           <Route path="/my-team" element={<MyTeamPage />} />
           <Route path="/leaderboard" element={<LeaderboardPage />} />
-        </Routes>
+          <Route path="/calendar" element={<CalendarPage />} />
+          <Route path="/participants/:id" element={<ParticipantProfilePage />} />
+  </Routes>
       </Layout>
     </BrowserRouter>
   );

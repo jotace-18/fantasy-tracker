@@ -1,3 +1,6 @@
+function getParticipantById(id, cb) {
+  participantsModel.getParticipantById(id, cb);
+}
 const participantsModel = require("../models/participantsModel");
 
 function addParticipant(data, cb) {
@@ -21,9 +24,10 @@ function fetchLeaderboard(cb) {
 }
 
 module.exports = {
-    addParticipant,
-    listParticipants,
-    editParticipantPoints,
-    removeParticipant,
-    fetchLeaderboard
+  addParticipant,
+  listParticipants,
+  editParticipantPoints,
+  removeParticipant,
+  fetchLeaderboard,
+  getParticipantById
 };

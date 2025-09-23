@@ -52,7 +52,7 @@ const findTopPlayersPaginated = (page = 1, limit = 20, sortBy = "total_points", 
         orderExpr = "total_points";
     }
 
-    // Query con CTE + JOIN
+    // Query con CTE + JOIN para obtener propietario (usuario o participante)
     const query = `
       WITH ranked AS (
         SELECT
@@ -67,9 +67,39 @@ const findTopPlayersPaginated = (page = 1, limit = 20, sortBy = "total_points", 
         LEFT JOIN teams t ON p.team_id = t.id
         LEFT JOIN player_points pp ON p.id = pp.player_id
         GROUP BY p.id
+      ),
+      user_owners AS (
+        SELECT up.player_id, 'user' AS owner_type, NULL AS participant_id, up.user_team_id AS owner_id
+        FROM user_players up
+      ),
+      participant_owners AS (
+        SELECT pp.player_id, 'participant' AS owner_type, pp.participant_id, NULL AS owner_id
+        FROM participant_players pp
+      ),
+      all_owners AS (
+        SELECT * FROM user_owners
+        UNION ALL
+        SELECT * FROM participant_owners
+      ),
+      owners_with_name AS (
+        SELECT a.player_id, a.owner_type, a.owner_id, a.participant_id, p.name AS participant_name
+        FROM all_owners a
+        LEFT JOIN participants p ON a.participant_id = p.id
       )
-      SELECT id, name, team_name, position, market_value, market_value_num, total_points
-      FROM ranked
+      SELECT
+        r.id,
+        r.name,
+        r.team_name,
+        r.position,
+        r.market_value,
+        r.market_value_num,
+        r.total_points,
+        o.owner_type,
+        o.owner_id,
+        o.participant_id,
+        o.participant_name
+      FROM ranked r
+      LEFT JOIN owners_with_name o ON o.player_id = r.id
       ORDER BY ${orderExpr} ${order}
       LIMIT ? OFFSET ?;
     `;

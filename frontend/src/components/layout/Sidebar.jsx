@@ -10,7 +10,8 @@ export default function Sidebar() {
     { to: "/teams", label: "Teams" },
     { to: "/analysis", label: "Analysis" },
     { to: "/my-team", label: "My Team" },
-    { to: "/leaderboard", label: "Leaderboard" }, // 👈 nueva opción
+    { to: "/leaderboard", label: "Leaderboard" },
+    { to: "/calendar", label: "Calendario" },
   ];
 
   return (

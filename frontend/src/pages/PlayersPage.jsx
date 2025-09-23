@@ -93,27 +93,16 @@ function PlayersPage() {
           <Thead>
             <Tr>
               <Th>Posición</Th>
-              <Th cursor="pointer" onClick={() => handleSort("name", "ASC")}>
+              <Th cursor="pointer" onClick={() => handleSort("name", "ASC")}> 
                 Nombre{renderArrow("name")}
               </Th>
-              <Th cursor="pointer" onClick={() => handleSort("team_name", "ASC")}>
+              <Th cursor="pointer" onClick={() => handleSort("team_name", "ASC")}> 
                 Equipo{renderArrow("team_name")}
               </Th>
               <Th>Posición en campo</Th>
-              <Th
-                isNumeric
-                cursor="pointer"
-                onClick={() => handleSort("market_value", "DESC")}
-              >
-                Valor Mercado{renderArrow("market_value")}
-              </Th>
-              <Th
-                isNumeric
-                cursor="pointer"
-                onClick={() => handleSort("total_points", "DESC")}
-              >
-                Puntos{renderArrow("total_points")}
-              </Th>
+              <Th isNumeric cursor="pointer" onClick={() => handleSort("market_value", "DESC")}>Valor Mercado{renderArrow("market_value")}</Th>
+              <Th>Propiedad</Th>
+              <Th isNumeric cursor="pointer" onClick={() => handleSort("total_points", "DESC")}>Puntos{renderArrow("total_points")}</Th>
             </Tr>
           </Thead>
           <Tbody>
@@ -131,6 +120,15 @@ function PlayersPage() {
                   {typeof player.market_value_num === "number" && !isNaN(player.market_value_num)
                     ? player.market_value_num.toLocaleString("es-ES")
                     : "-"}
+                </Td>
+                <Td>
+                  {player.owner_type === 'user' ? (
+                    <Link to="/my-team" style={{ color: "teal", fontWeight: 600 }}>Tú</Link>
+                  ) : player.owner_type === 'participant' && player.participant_name ? (
+                    <Link to={`/participants/${player.participant_id}`} style={{ color: "blue", fontWeight: 600 }}>{player.participant_name}</Link>
+                  ) : (
+                    <Text color="gray.400">Banco</Text>
+                  )}
                 </Td>
                 <Td
                   isNumeric

@@ -132,9 +132,27 @@ export default function LeaderboardPage() {
                     {i + 1} {badge}
                   </Td>
                   <Td>
-                    <Text fontWeight={i < 3 ? "semibold" : "medium"}>
-                      {p.name}
-                    </Text>
+                    {p.name === "Jc" ? (
+                      <Text
+                        as={"a"}
+                        href="/my-team"
+                        fontWeight={i < 3 ? "semibold" : "medium"}
+                        color="blue.600"
+                        _hover={{ textDecoration: "underline", color: "blue.800" }}
+                      >
+                        {p.name}
+                      </Text>
+                    ) : (
+                      <Text
+                        as={"a"}
+                        href={`/participants/${p.id}`}
+                        fontWeight={i < 3 ? "semibold" : "medium"}
+                        color="blue.600"
+                        _hover={{ textDecoration: "underline", color: "blue.800" }}
+                      >
+                        {p.name}
+                      </Text>
+                    )}
                   </Td>
                   <Td isNumeric>
                     <Badge

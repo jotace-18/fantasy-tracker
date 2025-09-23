@@ -1,4 +1,6 @@
+
 import { Flex, Button, Avatar } from "@chakra-ui/react";
+import InternalClock from "../InternalClock";
 
 export default function Topbar({ onScrape }) {
   return (
@@ -6,6 +8,7 @@ export default function Topbar({ onScrape }) {
       <Button colorScheme="blue" onClick={onScrape}>
         🔄 Actualizar datos
       </Button>
+      <InternalClock />
       <Avatar size="sm" name="Usuario" />
     </Flex>
   );

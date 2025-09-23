@@ -42,3 +42,12 @@ function removePlayer(participant_id, player_id, cb) {
 }
 
 module.exports = { fetchTeam, addPlayer, updateStatus, removePlayer };
+// Editar valor de cláusula
+module.exports.updateClauseValue = function(participant_id, player_id, clause_value, cb) {
+  participantPlayersModel.updateClauseValue(participant_id, player_id, clause_value, cb);
+};
+
+// Editar clausulabilidad
+module.exports.updateClausulable = function(participant_id, player_id, is_clausulable, cb) {
+  participantPlayersModel.updateClausulable(participant_id, player_id, is_clausulable, cb);
+};

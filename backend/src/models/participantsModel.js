@@ -1,3 +1,47 @@
+// Obtener participante por id (con plantilla/squad)
+function getParticipantById(id, cb) {
+  // Usar participant_players para la plantilla
+  const participantQuery = `SELECT * FROM participants WHERE id = ?`;
+  db.get(participantQuery, [id], (err, participant) => {
+    if (err) return cb(err);
+    if (!participant) return cb(new Error("Participante no encontrado"));
+
+    // Obtener plantilla/squad (puede estar vacía)
+    const squadQuery = `
+    SELECT 
+      pp.player_id,
+      pl.name,
+      pl.position,
+      t.name as team,
+      pl.market_value,
+      -- Corrige market_value_num: quita puntos (miles), cambia coma por punto, convierte a float y redondea
+      ROUND(CAST(REPLACE(REPLACE(pl.market_value, '.', ''), ',', '.') AS FLOAT)) AS market_value_num,
+      pp.clause_value,
+      pp.is_clausulable,
+      (
+        SELECT IFNULL(SUM(points), 0)
+        FROM player_points
+        WHERE player_id = pl.id
+      ) AS total_points
+    FROM participant_players pp
+    JOIN players pl ON pl.id = pp.player_id
+    JOIN teams t ON t.id = pl.team_id
+    WHERE pp.participant_id = ?
+  `;
+    db.all(squadQuery, [id], (err, squad) => {
+      if (err) {
+        // Si la tabla no existe, simplemente devuelve la info del participante sin plantilla
+        if (err.message && err.message.includes('no such table')) {
+          participant.squad = [];
+          return cb(null, participant);
+        }
+        return cb(err);
+      }
+      participant.squad = squad || [];
+      cb(null, participant);
+    });
+  });
+}
 const db = require("../db/db");
 
 // Crear participante
@@ -89,9 +133,10 @@ function getLeaderboard(cb) {
 }
 
 module.exports = {
-    createParticipant,
-    getAllParticipants,
-    updateParticipantPoints,
-    deleteParticipant,
-    getLeaderboard
+  createParticipant,
+  getAllParticipants,
+  updateParticipantPoints,
+  deleteParticipant,
+  getLeaderboard,
+  getParticipantById
 };
