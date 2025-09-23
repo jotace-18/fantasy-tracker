@@ -214,7 +214,6 @@ async function scrapeAllMinimalPlayers() {
             return;
           }
 
-          // === Guardar jugador
           let playerIdDb;
           await new Promise((res, rej) => {
             db.run(
@@ -232,50 +231,59 @@ async function scrapeAllMinimalPlayers() {
                 last_updated=CURRENT_TIMESTAMP
             `,
               [p.name, p.slug, teamId, marketValue, delta, maxValue, minValue, riskLevel, position],
-              function (err) {
+              (err) => {
                 if (err) return rej(err);
 
-                if (this.lastID) {
-                  playerIdDb = this.lastID;
-                  return res();
-                }
+                // 🔥 SIEMPRE obtener el ID real desde la tabla
                 db.get("SELECT id FROM players WHERE slug = ?", [p.slug], (err2, row) => {
-                  if (!err2 && row) playerIdDb = row.id;
+                  if (err2) return rej(err2);
+                  if (!row) return rej(new Error(`No se encontró player con slug=${p.slug}`));
+                  playerIdDb = row.id;
                   res();
                 });
               }
             );
           });
 
+
           // === Guardar histórico filtrado
           for (const mh of marketHistory) {
             await new Promise((res, rej) => {
               db.run(
                 `INSERT INTO player_market_history (player_id, date, value, delta)
-                 VALUES (?, ?, ?, ?)`,
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(player_id, date) DO UPDATE SET
+                  value = excluded.value,
+                  delta = excluded.delta`,
                 [playerIdDb, mh.date, mh.value, mh.delta],
                 (err) => (err ? rej(err) : res())
               );
+
             });
           }
 
-          // === Puntos fantasy
+          // === Puntos fantasy (incluye todas las jornadas, pasada y última)
           const fantasyPoints = [];
-          $("tr.plegado.plegable").each((_, el) => {
+          $("tr").each((_, el) => {
             const jornada = $(el).find("td.jorn-td").text().trim();
-            const points = $(el).find("span.laliga-fantasy").first().text().trim();
+            const points = $(el).find("td.data.points .laliga-fantasy").first().text().trim();
+
             if (jornada && points) {
-              fantasyPoints.push({ jornada: Number(jornada), puntos: Number(points) });
+              fantasyPoints.push({
+                jornada: Number(jornada),
+                puntos: Number(points),
+              });
             }
           });
 
+          // Guardar/actualizar en DB
           for (const fp of fantasyPoints) {
             await new Promise((res, rej) => {
               db.run(
                 `INSERT INTO player_points (player_id, jornada, points)
-                 VALUES (?, ?, ?)
-                 ON CONFLICT(player_id, jornada) DO UPDATE SET
-                   points=excluded.points`,
+                VALUES (?, ?, ?)
+                ON CONFLICT(player_id, jornada) DO UPDATE SET
+                  points = excluded.points`,
                 [playerIdDb, fp.jornada, fp.puntos],
                 (err) => (err ? rej(err) : res())
               );
