@@ -30,5 +30,14 @@ function deletePoints(req, res) {
   });
 }
 
+function deletePointsByJornada(req, res) {
+  const jornada = Number(req.params.jornada);
+  participantPointsService.removePointsByJornada(jornada, (err, result) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json(result);
+  });
+}
 
-module.exports = { createPoints, getPoints, updatePoints, deletePoints };
+
+
+module.exports = { createPoints, getPoints, updatePoints, deletePoints, deletePointsByJornada };

@@ -9,10 +9,9 @@ const minimalPlayersRoutes = require("./routes/minimalPlayersRoutes");
 const scraperRoutes = require("./routes/scraperRoutes");
 const participantsRoutes = require("./routes/participantsRoutes");
 const participantPointsRoutes = require("./routes/participantPointsRoutes");
-const transfersRoutes = require("./routes/transfersRoutes");
 const participantPlayersRoutes = require("./routes/participantPlayersRoutes");
 const scraperMetadataRoutes = require("./routes/scraperMetadataRoutes");
-const transferRoutes = require("./routes/transferRoutes");
+const transfersRoutes = require("./routes/transferRoutes");
 
 
 // 🔥 Nuevas rutas fragmentadas para el usuario
@@ -46,7 +45,6 @@ app.use("/api", scraperRoutes);
 
 app.use("/api/participants", participantsRoutes);
 app.use("/api/participant-points", participantPointsRoutes);
-app.use("/api/transfers", transfersRoutes);
 app.use("/api/participant-players", participantPlayersRoutes);
 
 // --- Sustitución de userRoutes por fragmentados ---
@@ -67,7 +65,7 @@ app.use("/api/market", marketRoutes);
 app.use("/api/scraper-metadata", scraperMetadataRoutes);
 
 // Endpoint de transferencias
-app.use("/api/transfer", transferRoutes);
+app.use("/api/transfers", transfersRoutes);
 
 // --- Healthcheck ---
 app.get("/health", (req, res) => {

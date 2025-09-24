@@ -63,7 +63,18 @@ export default function EditablePlayerRow({ player, participantId, onChange, row
 
   return (
     <tr style={rowStyle}>
-      <td style={{ fontWeight: 500 }}>{player.name}</td>
+      <td style={{ fontWeight: 500 }}>
+        <a
+          href={player.player_id ? `/players/${player.player_id}` : player.id ? `/players/${player.id}` : undefined}
+          style={{ color: '#2563eb', textDecoration: 'none', fontWeight: 500 }}
+          target="_blank"
+          rel="noopener noreferrer"
+          onMouseOver={e => (e.currentTarget.style.textDecoration = 'underline')}
+          onMouseOut={e => (e.currentTarget.style.textDecoration = 'none')}
+        >
+          {player.name}
+        </a>
+      </td>
       <td>{player.position}</td>
       <td>{player.team}</td>
       <td style={{ textAlign: "right" }}>
@@ -84,7 +95,7 @@ export default function EditablePlayerRow({ player, participantId, onChange, row
             onChange={(e) => setClause(Number(e.target.value))} // 🔥 convierte string → número
             width="90px"
           />
-        ) : player.clause_value ? (
+        ) : player.is_clausulable && player.clause_value ? (
           Number(player.clause_value).toLocaleString("es-ES")
         ) : (
           "-"

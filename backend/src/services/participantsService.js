@@ -1,3 +1,10 @@
+function getParticipantMoney(id, cb) {
+  participantsModel.getParticipantMoney(id, cb);
+}
+
+function editParticipantMoney(id, money, cb) {
+  participantsModel.updateParticipantMoney(id, money, cb);
+}
 function getParticipantById(id, cb) {
   participantsModel.getParticipantById(id, cb);
 }
@@ -29,5 +36,7 @@ module.exports = {
   editParticipantPoints,
   removeParticipant,
   fetchLeaderboard,
-  getParticipantById
+  getParticipantById,
+  getParticipantMoney,
+  editParticipantMoney
 };

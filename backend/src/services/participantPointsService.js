@@ -16,4 +16,8 @@ function removePoints(data, cb) {
   participantPointsModel.deletePoints(data, cb);
 }
 
-module.exports = { addPoints, listPointsByParticipant, editPoints, removePoints };
+function removePointsByJornada(jornada, cb) {
+  participantPointsModel.deletePointsByJornada(jornada, cb);
+}
+
+module.exports = { addPoints, listPointsByParticipant, editPoints, removePoints, removePointsByJornada };

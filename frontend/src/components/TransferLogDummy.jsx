@@ -1,42 +1,133 @@
-import { Box, Text, Heading } from "@chakra-ui/react";
+import { Box, Text, Heading, Flex } from "@chakra-ui/react";
 
 export default function TransferLogDummy() {
   return (
     <Box
-      flex={1.2}
-      minW="300px"
-      maxW="360px"
+      flex={1}
+      minW="500px"
+      maxW="100%"
       maxH="520px"
       overflowY="auto"
       bg="white"
       borderRadius="md"
       boxShadow="md"
-      p={3}
+      p={4}
       border="1px solid #e2e8f0"
     >
-      <Heading size="sm" mb={2} color="gray.700" textAlign="center">Log de traspasos</Heading>
-      <Box as="ul" pl={0} fontSize="sm" color="gray.700">
-        <li style={{marginBottom: 8, background: '#f3e8ff', borderLeft: '4px solid #a259e6', padding: '6px 10px', borderRadius: 6}}>
-          <b style={{color:'#a259e6'}}>JugadorX</b> → <b>Mercado</b> <span style={{float:'right', color:'#888'}}>12/09/2025</span><br/>
-          <span style={{color:'#a259e6'}}>Venta a mercado</span> <b style={{float:'right'}}>1.200.000 €</b>
-        </li>
-        <li style={{marginBottom: 8, background: '#e0f2fe', borderLeft: '4px solid #0284c7', padding: '6px 10px', borderRadius: 6}}>
-          <b style={{color:'#0284c7'}}>JugadorY</b> → <b>JugadorZ</b> <span style={{float: 'right', color:'#888'}}>10/09/2025</span><br/>
-          <span style={{color:'#0284c7'}}>Venta a jugador</span> <b style={{float:'right'}}>2.000.000 €</b>
-        </li>
-        <li style={{marginBottom: 8, background: '#fee2e2', borderLeft: '4px solid #dc2626', padding: '6px 10px', borderRadius: 6}}>
-          <b style={{color:'#dc2626'}}>JugadorA</b> ← <b>JugadorB</b> <span style={{float: 'right', color:'#888'}}>08/09/2025</span><br/>
-          <span style={{color:'#dc2626'}}>Clausulazo recibido</span> <b style={{float:'right'}}>3.500.000 €</b>
-        </li>
-        <li style={{marginBottom: 8, background: '#d1fae5', borderLeft: '4px solid #059669', padding: '6px 10px', borderRadius: 6}}>
-          <b style={{color:'#059669'}}>JugadorB</b> → <b>JugadorA</b> <span style={{float: 'right', color:'#888'}}>05/09/2025</span><br/>
-          <span style={{color:'#059669'}}>Clausulazo hecho</span> <b style={{float:'right'}}>3.500.000 €</b>
-        </li>
-        <li style={{marginBottom: 8, background: '#fef9c3', borderLeft: '4px solid #eab308', padding: '6px 10px', borderRadius: 6}}>
-          <b style={{color:'#eab308'}}>Mercado</b> → <b>JugadorX</b> <span style={{float: 'right', color:'#888'}}>01/09/2025</span><br/>
-          <span style={{color:'#eab308'}}>Compra a mercado</span> <b style={{float:'right'}}>1.200.000 €</b>
-        </li>
+      <Heading size="sm" mb={3} color="gray.700" textAlign="center">
+        Log de traspasos
+      </Heading>
+
+      {/* Ejemplo 1 */}
+      <Box
+        mb={3}
+        bg="purple.50"
+        borderLeft="4px solid #a259e6"
+        borderRadius="md"
+        p={3}
+      >
+        <Flex justify="space-between" mb={1}>
+          <Text fontWeight="bold" color="purple.700">
+            ParticipanteX → Mercado
+          </Text>
+          <Text fontSize="sm" color="gray.500">
+            12/09/2025
+          </Text>
+        </Flex>
+        <Flex justify="space-between">
+          <Text color="gray.800">JugadorX</Text>
+          <Text fontWeight="bold">1.200.000 €</Text>
+        </Flex>
       </Box>
+
+      {/* Ejemplo 2 */}
+      <Box
+        mb={3}
+        bg="blue.50"
+        borderLeft="4px solid #0284c7"
+        borderRadius="md"
+        p={3}
+      >
+        <Flex justify="space-between" mb={1}>
+          <Text fontWeight="bold" color="blue.700">
+            ParticipanteY → ParticipanteZ
+          </Text>
+          <Text fontSize="sm" color="gray.500">
+            10/09/2025
+          </Text>
+        </Flex>
+        <Flex justify="space-between">
+          <Text color="gray.800">JugadorY</Text>
+          <Text fontWeight="bold">2.000.000 €</Text>
+        </Flex>
+      </Box>
+
+      {/* Ejemplo 3 */}
+      <Box
+        mb={3}
+        bg="red.50"
+        borderLeft="4px solid #dc2626"
+        borderRadius="md"
+        p={3}
+      >
+        <Flex justify="space-between" mb={1}>
+          <Text fontWeight="bold" color="red.700">
+            ParticipanteA → ParticipanteB
+          </Text>
+          <Text fontSize="sm" color="gray.500">
+            08/09/2025
+          </Text>
+        </Flex>
+        <Flex justify="space-between">
+          <Text color="gray.800">JugadorA</Text>
+          <Text fontWeight="bold">3.500.000 €</Text>
+        </Flex>
+      </Box>
+
+      {/* Ejemplo 4 */}
+      <Box
+        mb={3}
+        bg="green.50"
+        borderLeft="4px solid #059669"
+        borderRadius="md"
+        p={3}
+      >
+        <Flex justify="space-between" mb={1}>
+          <Text fontWeight="bold" color="green.700">
+            ParticipanteB → ParticipanteA
+          </Text>
+          <Text fontSize="sm" color="gray.500">
+            05/09/2025
+          </Text>
+        </Flex>
+        <Flex justify="space-between">
+          <Text color="gray.800">JugadorB</Text>
+          <Text fontWeight="bold">3.500.000 €</Text>
+        </Flex>
+      </Box>
+
+      {/* Ejemplo 5 */}
+      <Box
+        mb={3}
+        bg="yellow.50"
+        borderLeft="4px solid #eab308"
+        borderRadius="md"
+        p={3}
+      >
+        <Flex justify="space-between" mb={1}>
+          <Text fontWeight="bold" color="yellow.700">
+            Mercado → ParticipanteX
+          </Text>
+          <Text fontSize="sm" color="gray.500">
+            01/09/2025
+          </Text>
+        </Flex>
+        <Flex justify="space-between">
+          <Text color="gray.800">JugadorX</Text>
+          <Text fontWeight="bold">1.200.000 €</Text>
+        </Flex>
+      </Box>
+
       <Text mt={2} color="gray.400" fontSize="xs" textAlign="center">
         (Próximamente funcional)
       </Text>

@@ -19,12 +19,12 @@ import {
 } from "@chakra-ui/react";
 import { FORMATIONS, FORMATION_MAP } from "../utils/formations";
 import { Link } from "react-router-dom";
-import InternalClock from "../components/InternalClock";
 import PlayerSearch from "../components/PlayerSearch";
 import { WarningTwoIcon, InfoOutlineIcon } from "@chakra-ui/icons";
 import useCumulativeRankHistory from "../hooks/useCumulativeRankHistory";
 import CumulativeRankChart from "../components/CumulativeRankChart";
 import TransferLogDummy from "../components/TransferLogDummy";
+import PlayerTransferLog from "../components/PlayerTransferLog";
 
 
 export default function MyTeamPage() {
@@ -32,6 +32,8 @@ export default function MyTeamPage() {
   const [myPlayers, setMyPlayers] = useState([]); // plantilla cargada desde DB
   const [selectedSlot, setSelectedSlot] = useState(null); // guarda { role, index }
   const [lineup, setLineup] = useState({}); // NUEVO: { slotIndex: player }
+  const [money, setMoney] = useState(null); // 💰 Dinero del usuario
+  const [refreshKey] = useState(0);
 
   // Modal buscar jugadores (pool global)
   const { isOpen, onOpen, onClose } = useDisclosure();
@@ -84,6 +86,24 @@ export default function MyTeamPage() {
       setLineup({});
     }
   };
+
+  // Cargar dinero del usuario
+  useEffect(() => {
+    async function fetchMoney() {
+      try {
+        const res = await fetch(`http://localhost:4000/api/participants/${myParticipantId}/money`);
+        if (res.ok) {
+          const data = await res.json();
+          setMoney(data.money);
+        } else {
+          setMoney(null);
+        }
+      } catch {
+        setMoney(null);
+      }
+    }
+    fetchMoney();
+  }, [myParticipantId]);
 
   // Jugadores ordenados
   const orderedPlayers = [...myPlayers].sort((a, b) => {
@@ -279,7 +299,6 @@ export default function MyTeamPage() {
   return (
     <Box p={6}>
       <Flex align="center" mb={4} gap={6}>
-        <InternalClock />
         <Flex align="center" gap={2}>
           <Box as="span" fontSize="2xl" color="blue.400">
             <span role="img" aria-label="fútbol">⚽</span>
@@ -301,20 +320,48 @@ export default function MyTeamPage() {
 
       {/* Gráfica de posición + Log de traspasos */}
       <Flex direction={{ base: "column", md: "row" }} gap={6} mb={8} align="stretch">
-        {/* Izquierda: solo la gráfica de posición */}
+        {/* Izquierda: solo la gráfica de posición y el card de dinero debajo */}
         <Box flex={2.5} minW={0}>
           {loadingCumulativeRank ? (
             <Flex justify="center" align="center" h="120px">
               <Spinner />
             </Flex>
           ) : (
-            <CumulativeRankChart history={cumulativeRankHistory} />
+            <>
+              <CumulativeRankChart history={cumulativeRankHistory} />
+              {/* Card de dinero justo debajo de la gráfica */}
+              <Flex justify="center" mt={4}>
+                <Box
+                  bg="yellow.200"
+                  px={12}
+                  py={3}
+                  borderRadius="xl"
+                  boxShadow="lg"
+                  display="flex"
+                  alignItems="center"
+                  gap={6}
+                  minW="360px"
+                  maxW="500px"
+                  justifyContent="center"
+                >
+                  <Text fontSize="2xl" color="yellow.900" fontWeight="extrabold" letterSpacing="wide">
+                    Dinero actual
+                  </Text>
+                  <Text fontSize="4xl" color="yellow.700" fontWeight="black" ml={4}>
+                    {money === null ? <Spinner size="md" /> : `€${Number(money).toLocaleString("es-ES")}`}
+                  </Text>
+                </Box>
+              </Flex>
+            </>
           )}
         </Box>
 
-        {/* Derecha: log de traspasos (dummy) */}
-        <TransferLogDummy />
+        {/* Derecha: log de traspasos */}
+        <Box flex={1} minW="420px" maxW="520px">
+          <PlayerTransferLog refreshKey={refreshKey} />
+        </Box>
       </Flex>
+
       {/* Selector de formación */}
       <Flex mb={6} align="center" gap={3}>
         <Text fontWeight="semibold">Formación:</Text>

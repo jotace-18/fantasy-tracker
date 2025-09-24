@@ -1,3 +1,27 @@
+// GET /api/participants/:id/money
+function getMoney(req, res) {
+  const { id } = req.params;
+  participantsService.getParticipantMoney(id, (err, result) => {
+    if (err) {
+      console.error(`[Controller] Error en getMoney:`, err.message);
+      return res.status(404).json({ error: err.message });
+    }
+    res.json(result);
+  });
+}
+
+// PUT /api/participants/:id/money
+function updateMoney(req, res) {
+  const { id } = req.params;
+  const { money } = req.body;
+  participantsService.editParticipantMoney(id, money, (err, result) => {
+    if (err) {
+      console.error(`[Controller] Error en updateMoney:`, err.message);
+      return res.status(400).json({ error: err.message });
+    }
+    res.json(result);
+  });
+}
 
 const participantsService = require("../services/participantsService");
 
@@ -72,4 +96,4 @@ function getLeaderboard(req, res) {
   });
 }
 
-module.exports = { add, list, updatePoints, remove, getLeaderboard, getById };
+module.exports = { add, list, updatePoints, remove, getLeaderboard, getById, getMoney, updateMoney };

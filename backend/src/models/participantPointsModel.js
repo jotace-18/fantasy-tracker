@@ -115,4 +115,32 @@ function deletePoints({ participant_id, jornada }, cb) {
   );
 }
 
-module.exports = { insertPoints, getPointsByParticipant, updatePoints, deletePoints };
+function deletePointsByJornada(jornada, cb) {
+  // Obtenemos todos los participantes que tienen puntos en esa jornada
+  db.all(
+    `SELECT DISTINCT participant_id FROM participant_points WHERE jornada = ?`,
+    [jornada],
+    (err, rows) => {
+      if (err) return cb(err);
+
+      // Borramos todos los puntos de esa jornada
+      db.run(
+        `DELETE FROM participant_points WHERE jornada = ?`,
+        [jornada],
+        function (err2) {
+          if (err2) return cb(err2);
+
+          console.log(`🗑️ Eliminados puntos de todos en jornada ${jornada}`);
+
+          // Recalcular total de cada participante afectado
+          rows.forEach(r => recalcTotal(r.participant_id));
+
+          cb(null, { changes: this.changes });
+        }
+      );
+    }
+  );
+}
+
+
+module.exports = { insertPoints, getPointsByParticipant, updatePoints, deletePoints, deletePointsByJornada };

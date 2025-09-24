@@ -14,5 +14,7 @@ router.put("/", participantPointsController.updatePoints);
 // Eliminar puntos
 router.delete("/", participantPointsController.deletePoints);
 
+router.delete("/jornada/:jornada", participantPointsController.deletePointsByJornada);
+
 
 module.exports = router;

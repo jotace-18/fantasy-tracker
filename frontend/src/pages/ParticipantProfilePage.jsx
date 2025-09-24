@@ -1,5 +1,4 @@
 import { Box, Heading, Text, Flex, Badge, Spinner, Divider, Button, useDisclosure, Modal, ModalOverlay, ModalContent, ModalHeader, ModalBody, ModalCloseButton } from "@chakra-ui/react";
-import TransferLogDummy from "../components/TransferLogDummy";
 import { useParams } from "react-router-dom";
 import PlayerSearch from "../components/PlayerSearch";
 import EditablePlayerRow from "./EditablePlayerRow";
@@ -10,6 +9,7 @@ import useCumulativePointsHistory from "../hooks/useCumulativePointsHistory";
 import CumulativePointsChart from "../components/CumulativePointsChart";
 import useCumulativeRankHistory from "../hooks/useCumulativeRankHistory";
 import CumulativeRankChart from "../components/CumulativeRankChart";
+import PlayerTransferLog from "../components/PlayerTransferLog";
 
 export default function ParticipantProfilePage() {
   const { id } = useParams();
@@ -46,10 +46,16 @@ export default function ParticipantProfilePage() {
   const handleAddPlayer = async (player) => {
     setAdding(true);
     try {
+      // Por defecto: no clausulable y cláusula igual a valor de mercado
+      const body = {
+        player_id: player.id,
+        is_clausulable: false,
+        clause_value: player.market_value_num || 0
+      };
       const res = await fetch(`/api/participant-players/${id}/team`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ player_id: player.id }),
+        body: JSON.stringify(body),
       });
       if (!res.ok) throw new Error("No se pudo añadir el jugador");
       fetchParticipant();
@@ -67,19 +73,36 @@ export default function ParticipantProfilePage() {
   const getSortedSquad = () => {
     if (!participant?.squad) return [];
     const sorted = [...participant.squad];
+    const positionOrder = [
+      "portero",
+      "defensa",
+      "centrocampista",
+      "mediocampista",
+      "delantero"
+    ];
     sorted.sort((a, b) => {
       let vA = a[sortBy], vB = b[sortBy];
-      // Para market_value_num y total_points, comparar como número
-      if (["market_value_num", "total_points", "clause_value"].includes(sortBy)) {
+      if (sortBy === "position") {
+        // Orden personalizado para posición
+        const idxA = positionOrder.indexOf((vA || "").toLowerCase());
+        const idxB = positionOrder.indexOf((vB || "").toLowerCase());
+        if (idxA === -1 && idxB === -1) return 0;
+        if (idxA === -1) return order === "ASC" ? 1 : -1;
+        if (idxB === -1) return order === "ASC" ? -1 : 1;
+        return order === "ASC" ? idxA - idxB : idxB - idxA;
+      } else if (["market_value_num", "total_points", "clause_value"].includes(sortBy)) {
         vA = Number(vA) || 0;
         vB = Number(vB) || 0;
+        if (vA < vB) return order === "ASC" ? -1 : 1;
+        if (vA > vB) return order === "ASC" ? 1 : -1;
+        return 0;
       } else {
         vA = (vA || "").toString().toLowerCase();
         vB = (vB || "").toString().toLowerCase();
+        if (vA < vB) return order === "ASC" ? -1 : 1;
+        if (vA > vB) return order === "ASC" ? 1 : -1;
+        return 0;
       }
-      if (vA < vB) return order === "ASC" ? -1 : 1;
-      if (vA > vB) return order === "ASC" ? 1 : -1;
-      return 0;
     });
     return sorted;
   };
@@ -184,6 +207,7 @@ export default function ParticipantProfilePage() {
                         participantId={id}
                         onChange={fetchParticipant}
                         rowStyle={{ background: idx % 2 === 0 ? '#f8fafc' : '#fff', borderBottom: '1px solid #e2e8f0' }}
+                        // showClauseValue is not needed; let EditablePlayerRow always render 'Sí' only if is_clausulable is true
                       />
                     ))}
                   </tbody>
@@ -205,7 +229,7 @@ export default function ParticipantProfilePage() {
           </Box>
         </Box>
         {/* Transfer log card (right column) */}
-        <TransferLogDummy />
+        <PlayerTransferLog participantId={id} />
       </Flex>
     </Box>
   );

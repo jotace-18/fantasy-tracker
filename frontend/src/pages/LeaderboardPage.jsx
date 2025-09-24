@@ -13,12 +13,17 @@ import {
   Badge,
   Flex,
   Text,
+  useDisclosure,
+  Button,
 } from "@chakra-ui/react";
+
+import AddPointsModal from "../components/AddPointsModal";
 
 export default function LeaderboardPage() {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedJornada, setSelectedJornada] = useState("total");
+  const { isOpen, onOpen, onClose } = useDisclosure();
 
   useEffect(() => {
     const fetchLeaderboard = async () => {
@@ -73,7 +78,6 @@ export default function LeaderboardPage() {
         <Heading size="lg" display="flex" alignItems="center" gap={2}>
           🏆 Leaderboard Fantasy
         </Heading>
-
         <Select
           maxW="220px"
           value={selectedJornada}
@@ -89,6 +93,18 @@ export default function LeaderboardPage() {
           ))}
         </Select>
       </Flex>
+
+      {/* Botón para añadir puntos */}
+      <Flex justify="flex-end" mb={4}>
+        <Button colorScheme="teal" onClick={onOpen}>➕ Añadir puntos jornada</Button>
+      </Flex>
+
+      <AddPointsModal
+        isOpen={isOpen}
+        onClose={onClose}
+        participants={data}
+        onSaved={() => window.location.reload()} // refresca tras guardar
+      />
 
       {loading ? (
         <Flex justify="center" align="center" h="200px">

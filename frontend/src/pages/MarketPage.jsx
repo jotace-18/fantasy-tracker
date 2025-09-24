@@ -16,12 +16,14 @@ import {
 import MarketTable from "../components/MarketTable";
 import MarketAdminForm from "../components/MarketAdminForm";
 import AddTransferModal from "../components/AddTransferModal";
+import TransferLog from "../components/TransferLog";
 
 export default function MarketPage() {
   const [players, setPlayers] = useState([]);
   const [isOpen, setIsOpen] = useState(false);       // Modal editar mercado
   const [isTransferOpen, setIsTransferOpen] = useState(false); // Modal añadir traspaso
   const [saving, setSaving] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0); // Para refrescar el log
 
   // 🔹 Cargar mercado
   const fetchMarket = async () => {
@@ -65,40 +67,7 @@ export default function MarketPage() {
         </Box>
 
         {/* Columna derecha: log */}
-        <Box
-          flex={1.2}
-          minW="300px"
-          maxW="360px"
-          maxH="520px"
-          overflowY="auto"
-          bg="white"
-          borderRadius="md"
-          boxShadow="md"
-          p={3}
-          border="1px solid #e2e8f0"
-        >
-          <Text fontWeight="bold" mb={2} textAlign="center">
-            Log de traspasos
-          </Text>
-          {/* Por ahora datos de prueba, luego lo conectamos con /api/transfers */}
-          <ul style={{ fontSize: "sm", color: "#444" }}>
-            <li
-              style={{
-                marginBottom: 8,
-                background: "#f3e8ff",
-                borderLeft: "4px solid #a259e6",
-                padding: "6px 10px",
-                borderRadius: 6,
-              }}
-            >
-              <b style={{ color: "#a259e6" }}>JugadorX</b> → <b>Mercado</b>
-              <span style={{ float: "right", color: "#888" }}>12/09/2025</span>
-              <br />
-              <span style={{ color: "#a259e6" }}>Venta a mercado</span>
-              <b style={{ float: "right" }}>1.200.000 €</b>
-            </li>
-          </ul>
-        </Box>
+        <TransferLog refreshKey={refreshKey} />
       </Flex>
 
       {/* Modal con MarketAdminForm */}
@@ -130,7 +99,7 @@ export default function MarketPage() {
       <AddTransferModal
         isOpen={isTransferOpen}
         onClose={() => setIsTransferOpen(false)}
-        onTransferAdded={fetchMarket}
+        onTransferAdded={() => setRefreshKey(prev => prev + 1)}
       />
     </Box>
   );

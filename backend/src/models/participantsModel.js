@@ -1,3 +1,30 @@
+// Obtener dinero de un participante por id
+function getParticipantMoney(id, cb) {
+  db.get(`SELECT money FROM participants WHERE id = ?`, [id], (err, row) => {
+    if (err) {
+      console.error("❌ [Model] Error obteniendo dinero:", err.message);
+      return cb(err);
+    }
+    if (!row) return cb(new Error("Participante no encontrado"));
+    cb(null, { id, money: row.money });
+  });
+}
+
+// Actualizar dinero de un participante
+function updateParticipantMoney(id, money, cb) {
+  db.run(
+    `UPDATE participants SET money = ? WHERE id = ?`,
+    [money, id],
+    function (err) {
+      if (err) {
+        console.error("❌ [Model] Error actualizando dinero:", err.message);
+        return cb(err);
+      }
+      console.log(`✅ [Model] Participante ${id} actualizado a ${money} dinero`);
+      cb(null, { id, money });
+    }
+  );
+}
 // Obtener participante por id (con plantilla/squad)
 function getParticipantById(id, cb) {
   // Usar participant_players para la plantilla
@@ -127,7 +154,6 @@ function getLeaderboard(cb) {
     });
 
     const result = Object.values(participants);
-    console.log(`✅ [Model] Leaderboard generado con ${result.length} participantes`);
     cb(null, result);
   });
 }
@@ -139,4 +165,6 @@ module.exports = {
   deleteParticipant,
   getLeaderboard,
   getParticipantById
+  ,getParticipantMoney
+  ,updateParticipantMoney
 };
