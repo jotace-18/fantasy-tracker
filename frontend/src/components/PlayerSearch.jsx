@@ -79,6 +79,12 @@ export default function PlayerSearch({ onSelect, showAddButton = true, limit = 2
   const headerBg = useColorModeValue("gray.100", "gray.700");
   const rowHoverBg = useColorModeValue("gray.50", "gray.600");
 
+  // Handler para seleccionar y limpiar búsqueda
+  const handleSelectAndClear = (p) => {
+    if (onSelect) onSelect(p);
+    setName("");
+  };
+
   return (
     <Box
       maxW="1000px"
@@ -114,13 +120,13 @@ export default function PlayerSearch({ onSelect, showAddButton = true, limit = 2
           <Table variant="striped" colorScheme="gray" size="sm">
             <Thead bg={headerBg} position="sticky" top={0} zIndex={1}>
               <Tr>
-                <Th cursor="pointer" onClick={() => handleSort("name", "ASC")}>
+                <Th cursor="pointer" onClick={() => handleSort("name", "ASC")}> 
                   Nombre{renderArrow("name")}
                 </Th>
-                <Th cursor="pointer" onClick={() => handleSort("team_name", "ASC")}>
+                <Th cursor="pointer" onClick={() => handleSort("team_name", "ASC")}> 
                   Equipo{renderArrow("team_name")}
                 </Th>
-                <Th cursor="pointer" onClick={() => handleSort("position", "ASC")}>
+                <Th cursor="pointer" onClick={() => handleSort("position", "ASC")}> 
                   Posición{renderArrow("position")}
                 </Th>
                 <Th
@@ -138,6 +144,7 @@ export default function PlayerSearch({ onSelect, showAddButton = true, limit = 2
                 <Tr
                   key={p.id}
                   _hover={{ bg: rowHoverBg, cursor: "pointer" }}
+                  onClick={() => handleSelectAndClear(p)}
                 >
                   <Td>{p.name}</Td>
                   <Td>{p.team_name}</Td>
@@ -152,7 +159,7 @@ export default function PlayerSearch({ onSelect, showAddButton = true, limit = 2
                       <Button
                         size="sm"
                         colorScheme="teal"
-                        onClick={() => onSelect && onSelect(p)}
+                        onClick={e => { e.stopPropagation(); handleSelectAndClear(p); }}
                       >
                         ➕ Añadir
                       </Button>

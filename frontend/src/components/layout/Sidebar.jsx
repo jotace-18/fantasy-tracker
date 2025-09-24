@@ -12,6 +12,7 @@ export default function Sidebar() {
     { to: "/my-team", label: "My Team" },
     { to: "/leaderboard", label: "Leaderboard" },
     { to: "/calendar", label: "Calendario" },
+    { to: "/market", label: "Mercado Diario" },
   ];
 
   return (
