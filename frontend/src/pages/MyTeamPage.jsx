@@ -22,10 +22,9 @@ import { Link } from "react-router-dom";
 import InternalClock from "../components/InternalClock";
 import PlayerSearch from "../components/PlayerSearch";
 import { WarningTwoIcon, InfoOutlineIcon } from "@chakra-ui/icons";
-import useCumulativePointsHistory from "../hooks/useCumulativePointsHistory";
 import useCumulativeRankHistory from "../hooks/useCumulativeRankHistory";
-import CumulativePointsChart from "../components/CumulativePointsChart";
 import CumulativeRankChart from "../components/CumulativeRankChart";
+import TransferLogDummy from "../components/TransferLogDummy";
 
 
 export default function MyTeamPage() {
@@ -44,7 +43,6 @@ export default function MyTeamPage() {
   } = useDisclosure();
   // Id del usuario actual (Jc)
   const myParticipantId = 8; // Hardcodeado para demo, ideal: obtener del contexto de usuario
-  const { history: cumulativeHistory, loading: loadingCumulative } = useCumulativePointsHistory(myParticipantId);
   const { history: cumulativeRankHistory, loading: loadingCumulativeRank } = useCumulativeRankHistory(myParticipantId);
 
   // 📌 Cargar jugadores y formación persistente al montar el componente
@@ -301,24 +299,22 @@ export default function MyTeamPage() {
         </Box>
       </Flex>
 
-      <Box mb={8}>
-        <Flex direction={{ base: "column", md: "row" }} gap={6}>
-          <Box flex={1} minW={0}>
-            {loadingCumulative ? (
-              <Flex justify="center" align="center" h="120px"><Spinner /></Flex>
-            ) : (
-              <CumulativePointsChart history={cumulativeHistory} />
-            )}
-          </Box>
-          <Box flex={1} minW={0}>
-            {loadingCumulativeRank ? (
-              <Flex justify="center" align="center" h="120px"><Spinner /></Flex>
-            ) : (
-              <CumulativeRankChart history={cumulativeRankHistory} />
-            )}
-          </Box>
-        </Flex>
-      </Box>
+      {/* Gráfica de posición + Log de traspasos */}
+      <Flex direction={{ base: "column", md: "row" }} gap={6} mb={8} align="stretch">
+        {/* Izquierda: solo la gráfica de posición */}
+        <Box flex={2.5} minW={0}>
+          {loadingCumulativeRank ? (
+            <Flex justify="center" align="center" h="120px">
+              <Spinner />
+            </Flex>
+          ) : (
+            <CumulativeRankChart history={cumulativeRankHistory} />
+          )}
+        </Box>
+
+        {/* Derecha: log de traspasos (dummy) */}
+        <TransferLogDummy />
+      </Flex>
       {/* Selector de formación */}
       <Flex mb={6} align="center" gap={3}>
         <Text fontWeight="semibold">Formación:</Text>

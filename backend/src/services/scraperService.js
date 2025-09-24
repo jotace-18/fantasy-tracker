@@ -3,6 +3,8 @@ const axios = require("axios");
 const cheerio = require("cheerio");
 const db = require("../db/db");
 const pLimit = require("p-limit").default;
+const scraperMetadataService = require("./scraperMetadataService");
+
 
 // 🔹 fecha mínima permitida
 const MIN_DATE = new Date("2025-08-21");
@@ -306,9 +308,22 @@ async function scrapeAllMinimalPlayers() {
       await Promise.all(rows.map((p) => limit(() => processPlayer(p))));
 
       console.log("\n=== Scraping completado ===");
+
+      // 👇 actualizar metadata
+      await new Promise((res, rej) => {
+        scraperMetadataService.setLastScraped(new Date().toISOString(), (err) => {
+          if (err) return rej(err);
+          console.log("🕒 Metadata actualizada tras jugadores");
+          res();
+        });
+      });
+
       resolve(results);
+
     });
   });
 }
+
+
 
 module.exports = { scrapeAllMinimalPlayers, scrapeTeams };

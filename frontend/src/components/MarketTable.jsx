@@ -1,8 +1,8 @@
+// MarketTable.jsx (limpio)
 import React from "react";
-import { Box, Table, Thead, Tbody, Tr, Th, Td, Text, Badge, Icon, Link as ChakraLink } from "@chakra-ui/react";
+import { Box, Table, Thead, Tbody, Tr, Th, Td, Badge, Link as ChakraLink, Text } from "@chakra-ui/react";
 import { ArrowUpIcon, ArrowDownIcon } from "@chakra-ui/icons";
 import { Link } from "react-router-dom";
-
 
 const MarketTable = ({ players = [] }) => (
   <Box bg="white" borderRadius="lg" boxShadow="md" p={6}>
@@ -18,39 +18,56 @@ const MarketTable = ({ players = [] }) => (
         </Tr>
       </Thead>
       <Tbody>
-        {players.map(player => (
-          <Tr key={player.id}>
+        {players.map((player) => (
+          <Tr key={player.player_id}>
             <Td>
-              {player.id ? (
-                <ChakraLink as={Link} to={`/players/${player.id}`} color="teal.600" fontWeight="medium" _hover={{ textDecoration: "underline", color: "teal.800" }}>
+              {player.player_id ? (
+                <ChakraLink
+                  as={Link}
+                  to={`/players/${player.player_id}`}
+                  color="teal.600"
+                  fontWeight="medium"
+                  _hover={{ textDecoration: "underline", color: "teal.800" }}
+                >
                   {player.name || "-"}
                 </ChakraLink>
-              ) : (player.name || "-")}
+              ) : (
+                player.name || "-"
+              )}
             </Td>
             <Td>
               {player.team_id ? (
-                <ChakraLink as={Link} to={`/teams/${player.team_id}`} color="teal.600" fontWeight="medium" _hover={{ textDecoration: "underline", color: "teal.800" }}>
-                  {player.team_name || player.team || "-"}
+                <ChakraLink
+                  as={Link}
+                  to={`/teams/${player.team_id}`}
+                  color="teal.600"
+                  fontWeight="medium"
+                  _hover={{ textDecoration: "underline", color: "teal.800" }}
+                >
+                  {player.team_name || "-"}
                 </ChakraLink>
-              ) : (player.team_name || player.team || "-")}
+              ) : (
+                player.team_name || "-"
+              )}
             </Td>
-            <Td isNumeric>{player.points?.total ?? player.totalPoints ?? "-"}</Td>
+            <Td isNumeric>{player.total_points ?? "-"}</Td>
             <Td isNumeric>
-              {typeof (player.market?.current ?? player.market_value_num ?? player.marketValue) === "number"
-                ? (player.market?.current ?? player.market_value_num ?? player.marketValue).toLocaleString("es-ES") + " €"
+              {typeof player.market_value_num === "number"
+                ? player.market_value_num.toLocaleString("es-ES") + " €"
                 : "-"}
             </Td>
             <Td>
               {(() => {
-                const delta = player.market?.delta ?? player.market_delta;
-                if (delta > 0) return <Badge colorScheme="green"><ArrowUpIcon mr={1}/>Sube</Badge>;
-                if (delta < 0) return <Badge colorScheme="red"><ArrowDownIcon mr={1}/>Baja</Badge>;
+                const delta = player.market_delta;
+                if (delta > 0) return <Badge colorScheme="green">Sube</Badge>;
+                if (delta < 0) return <Badge colorScheme="red">Baja</Badge>;
                 return <Badge colorScheme="gray">-</Badge>;
               })()}
             </Td>
           </Tr>
         ))}
       </Tbody>
+
     </Table>
   </Box>
 );

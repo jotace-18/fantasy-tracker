@@ -238,7 +238,7 @@ function TeamDetailPage() {
                     // Log para depuración
                     if (calendar.length > 0) {
                       console.log('Equipo actual:', equipoActualNombre, '| Normalizado:', normEquipo);
-                      calendar.forEach((jornada, idx) => {
+                      calendar.forEach((jornada) => {
                         if (jornada.enfrentamientos) {
                           jornada.enfrentamientos.forEach((e, i) => {
                             console.log(`J${jornada.numero} Enfrentamiento ${i}:`,

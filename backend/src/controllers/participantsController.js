@@ -12,7 +12,6 @@ function getById(req, res) {
       }
       return res.status(404).json({ error: err.message });
     }
-    console.log(`[Controller] Respondiendo participante:`, participant);
     res.json(participant);
   });
 }
@@ -69,7 +68,6 @@ function getLeaderboard(req, res) {
       console.error(`[Controller] Error en getLeaderboard:`, err.message);
       return res.status(500).json({ error: err.message });
     }
-    console.log(`[Controller] Respondiendo leaderboard:`, result);
     res.json(result);
   });
 }

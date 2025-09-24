@@ -1,37 +1,18 @@
+// routes/marketRoutes.js
 const express = require("express");
 const router = express.Router();
+const controller = require("../controllers/marketController");
 
-// En memoria: lista de IDs de jugadores del mercado diario
-let dailyMarket = [];
-const { findPlayerById } = require("../models/playersModel");
+// GET todos los jugadores en mercado
+router.get("/", controller.list);
 
-// Obtener el mercado diario actual (devuelve datos completos)
-router.get("/", async (req, res) => {
-  try {
-    // Buscar datos completos de cada jugador
-    const players = await Promise.all(
-      dailyMarket.map(async (id) => {
-        try {
-          return await findPlayerById(id);
-        } catch {
-          return null;
-        }
-      })
-    );
-    res.json({ players: players.filter(Boolean) });
-  } catch (err) {
-    res.status(500).json({ error: "Error obteniendo mercado" });
-  }
-});
+// POST añadir jugador al mercado
+router.post("/", controller.add);
 
-// Actualizar el mercado diario (sobrescribe la lista)
-router.post("/", (req, res) => {
-  // Espera un array de player_id en req.body.players
-  if (!Array.isArray(req.body.players)) {
-    return res.status(400).json({ error: "players debe ser un array de IDs" });
-  }
-  dailyMarket = req.body.players;
-  res.json({ ok: true, players: dailyMarket });
-});
+// DELETE un jugador concreto
+router.delete("/:playerId", controller.remove);
+
+// DELETE todos
+router.delete("/", controller.clearAll);
 
 module.exports = router;

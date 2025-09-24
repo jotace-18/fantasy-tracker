@@ -11,6 +11,8 @@ const participantsRoutes = require("./routes/participantsRoutes");
 const participantPointsRoutes = require("./routes/participantPointsRoutes");
 const transfersRoutes = require("./routes/transfersRoutes");
 const participantPlayersRoutes = require("./routes/participantPlayersRoutes");
+const scraperMetadataRoutes = require("./routes/scraperMetadataRoutes");
+const transferRoutes = require("./routes/transferRoutes");
 
 
 // 🔥 Nuevas rutas fragmentadas para el usuario
@@ -60,6 +62,12 @@ app.use("/api/calendar", calendarRoutes);
 
 // Endpoint del mercado diario
 app.use("/api/market", marketRoutes);
+
+// Endpoint del scraper metadata
+app.use("/api/scraper-metadata", scraperMetadataRoutes);
+
+// Endpoint de transferencias
+app.use("/api/transfer", transferRoutes);
 
 // --- Healthcheck ---
 app.get("/health", (req, res) => {
