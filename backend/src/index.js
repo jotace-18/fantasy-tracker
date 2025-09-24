@@ -28,6 +28,10 @@ const calendarRoutes = require("./routes/calendarRoutes");
 const app = express();
 const PORT = process.env.PORT || 4000;
 
+
+// Mercado diario
+const marketRoutes = require("./routes/marketRoutes");
+
 // Middlewares
 app.use(cors());
 app.use(express.json());
@@ -43,18 +47,19 @@ app.use("/api/participant-points", participantPointsRoutes);
 app.use("/api/transfers", transfersRoutes);
 app.use("/api/participant-players", participantPlayersRoutes);
 
-
 // --- Sustitución de userRoutes por fragmentados ---
 app.use("/api/user-teams", userTeamsRoutes);
 app.use("/api/user-players", userPlayersRoutes);
 app.use("/api/user-points", userPointsRoutes);
-
 
 // Endpoint del reloj interno
 app.use("/api/clock", clockRoutes);
 
 // Endpoint del calendario
 app.use("/api/calendar", calendarRoutes);
+
+// Endpoint del mercado diario
+app.use("/api/market", marketRoutes);
 
 // --- Healthcheck ---
 app.get("/health", (req, res) => {
