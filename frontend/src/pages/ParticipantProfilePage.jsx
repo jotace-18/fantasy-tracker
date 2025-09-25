@@ -22,21 +22,23 @@ export default function ParticipantProfilePage() {
   const [sortBy, setSortBy] = useState("total_points");
   const [order, setOrder] = useState("DESC");
 
-  const fetchParticipant = () => {
+  const fetchParticipant = async () => {
     setLoading(true);
-    fetch(`/api/participants/${id}`)
-      .then((res) => {
-        if (!res.ok) throw new Error("No se pudo cargar el participante");
-        return res.json();
-      })
-      .then((data) => {
-        setParticipant(data);
-        setLoading(false);
-      })
-      .catch((err) => {
-        setError(err.message);
-        setLoading(false);
-      });
+    try {
+      // Fetch participant base data
+      const res = await fetch(`/api/participants/${id}`);
+      if (!res.ok) throw new Error("No se pudo cargar el participante");
+      const data = await res.json();
+      // Fetch extended squad data
+      const squadRes = await fetch(`/api/participant-players/${id}/team`);
+      if (!squadRes.ok) throw new Error("No se pudo cargar la plantilla extendida");
+      const squad = await squadRes.json();
+      setParticipant({ ...data, squad });
+      setLoading(false);
+    } catch (err) {
+      setError(err.message);
+      setLoading(false);
+    }
   };
   useEffect(() => {
     fetchParticipant();
@@ -185,6 +187,7 @@ export default function ParticipantProfilePage() {
               <Heading size="md">Plantilla completa</Heading>
               <Button colorScheme="teal" size="sm" onClick={onOpen}>Añadir jugador</Button>
             </Flex>
+            {(() => { console.log('DEBUG squad:', participant.squad); return null; })()}
             {participant.squad && participant.squad.length > 0 ? (
               <Box overflowX="auto">
                 <table style={{ width: "100%", borderCollapse: "separate", borderSpacing: 0 }}>
@@ -196,6 +199,7 @@ export default function ParticipantProfilePage() {
                       <th style={{ fontWeight: 700, padding: '10px 8px', borderBottom: '2px solid #cbd5e1', textAlign: 'right', cursor: 'pointer' }} onClick={() => handleSort('market_value_num', 'DESC')}>Valor Mercado{renderArrow('market_value_num')}</th>
                       <th style={{ fontWeight: 700, padding: '10px 8px', borderBottom: '2px solid #cbd5e1', textAlign: 'right', cursor: 'pointer' }} onClick={() => handleSort('clause_value', 'DESC')}>Cláusula{renderArrow('clause_value')}</th>
                       <th style={{ fontWeight: 700, padding: '10px 8px', borderBottom: '2px solid #cbd5e1', textAlign: 'center', cursor: 'pointer' }} onClick={() => handleSort('is_clausulable', 'DESC')}>Clausulable{renderArrow('is_clausulable')}</th>
+                      <th style={{ fontWeight: 700, padding: '10px 8px', borderBottom: '2px solid #cbd5e1', textAlign: 'center' }}>Tiempo Expira</th>
                       <th style={{ fontWeight: 700, padding: '10px 8px', borderBottom: '2px solid #cbd5e1', textAlign: 'right', cursor: 'pointer' }} onClick={() => handleSort('total_points', 'DESC')}>Puntos{renderArrow('total_points')}</th>
                       <th style={{ fontWeight: 700, padding: '10px 8px', borderBottom: '2px solid #cbd5e1', textAlign: 'center' }}>Acciones</th>
                     </tr>

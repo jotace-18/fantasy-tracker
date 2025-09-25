@@ -16,58 +16,79 @@ export default function AddTransferModal({ isOpen, onClose, onTransferAdded }) {
   const [amount, setAmount] = useState("");
   const [participants, setParticipants] = useState([]);
   const [availablePlayers, setAvailablePlayers] = useState([]);
+  const [date, setDate] = useState("");
+  const [time, setTime] = useState("");
 
   // ⚡ IDs propios
   const myParticipantId = "8"; // tu participante (JC)
-  const myUserTeamId = "1";    // tu user_team
+  const myUserTeamId = "1"; // tu user_team
+
+  // Set default date/time on open
+  useEffect(() => {
+    if (isOpen) {
+      const now = new Date();
+      const yyyy = now.getFullYear();
+      const mm = String(now.getMonth() + 1).padStart(2, "0");
+      const dd = String(now.getDate()).padStart(2, "0");
+      const hh = String(now.getHours()).padStart(2, "0");
+      const min = String(now.getMinutes()).padStart(2, "0");
+      setDate(`${yyyy}-${mm}-${dd}`);
+      setTime(`${hh}:${min}`);
+    }
+  }, [isOpen]);
 
   // Participantes
   useEffect(() => {
     fetch("/api/participants")
-      .then(res => res.json())
-      .then(data => setParticipants(data))
+      .then((res) => res.json())
+      .then((data) => setParticipants(data))
       .catch(() => setParticipants([]));
   }, []);
 
   // Jugadores disponibles
   useEffect(() => {
-  let fetchUrl = null;
+    let fetchUrl = null;
 
-  if (action === "buy" || action === "clause") {
-    if (toParticipant === "") {
-      // ⚡ Caso especial: compra desde Mercado
-      fetchUrl = "/api/market";
-    } else if (!toParticipant) {
-      return setAvailablePlayers([]);
-    } else {
+    if (action === "buy" || action === "clause") {
+      if (toParticipant === "") {
+        fetchUrl = "/api/market";
+      } else if (!toParticipant) {
+        return setAvailablePlayers([]);
+      } else {
+        fetchUrl =
+          toParticipant === myParticipantId
+            ? `/api/user-players/${myUserTeamId}`
+            : `/api/participant-players/${toParticipant}/team`;
+      }
+    } else if (action === "sell") {
+      if (!fromParticipant) return setAvailablePlayers([]);
       fetchUrl =
-        toParticipant === myParticipantId
+        fromParticipant === myParticipantId
           ? `/api/user-players/${myUserTeamId}`
-          : `/api/participant-players/${toParticipant}/team`;
+          : `/api/participant-players/${fromParticipant}/team`;
     }
-  } else if (action === "sell") {
-    if (!fromParticipant) return setAvailablePlayers([]);
-    fetchUrl =
-      fromParticipant === myParticipantId
-        ? `/api/user-players/${myUserTeamId}`
-        : `/api/participant-players/${fromParticipant}/team`;
-  }
 
-  if (fetchUrl) {
-    console.log("📡 Fetch jugadores de:", fetchUrl);
-    fetch(fetchUrl)
-      .then((res) => res.json())
-      .then((data) => {
-        console.log("✅ Jugadores recibidos:", data);
-        setAvailablePlayers(Array.isArray(data) ? data : []);
-      })
-      .catch((err) => {
-        console.error("❌ Error cargando jugadores:", err);
-        setAvailablePlayers([]);
-      });
-  }
-}, [action, fromParticipant, toParticipant]);
+    if (fetchUrl) {
+      console.log("📡 Fetch jugadores de:", fetchUrl);
+      fetch(fetchUrl)
+        .then((res) => res.json())
+        .then((data) => {
+          let players = Array.isArray(data) ? data : [];
 
+          // ⚡ Solo mostrar clausulables si el tipo es "clause"
+          if (action === "clause") {
+            players = players.filter((p) => p.is_clausulable === 1);
+          }
+
+          console.log("✅ Jugadores recibidos:", players);
+          setAvailablePlayers(players);
+        })
+        .catch((err) => {
+          console.error("❌ Error cargando jugadores:", err);
+          setAvailablePlayers([]);
+        });
+    }
+  }, [action, fromParticipant, toParticipant]);
 
   // Autocompletar precio
   const handleSelectPlayer = (p) => {
@@ -75,6 +96,22 @@ export default function AddTransferModal({ isOpen, onClose, onTransferAdded }) {
     if (p.market_value_num) {
       setAmount(p.market_value_num);
     }
+  };
+
+  // Reset form fields
+  const resetForm = () => {
+    setFromParticipant("");
+    setToParticipant("");
+    setAction("buy");
+    setPlayer(null);
+    setAmount("");
+    const now = new Date();
+    setDate(now.toISOString().split("T")[0]);
+    setTime(
+      `${String(now.getHours()).padStart(2, "0")}:${String(
+        now.getMinutes()
+      ).padStart(2, "0")}`
+    );
   };
 
   // Guardar
@@ -85,7 +122,7 @@ export default function AddTransferModal({ isOpen, onClose, onTransferAdded }) {
         description: "Debes rellenar todos los campos",
         status: "error",
         duration: 2000,
-        isClosable: true
+        isClosable: true,
       });
       return;
     }
@@ -96,7 +133,7 @@ export default function AddTransferModal({ isOpen, onClose, onTransferAdded }) {
         description: "El precio no puede ser menor al valor de mercado",
         status: "error",
         duration: 2000,
-        isClosable: true
+        isClosable: true,
       });
       return;
     }
@@ -106,11 +143,11 @@ export default function AddTransferModal({ isOpen, onClose, onTransferAdded }) {
     let buyerId = null;
 
     if (action === "buy") {
-      sellerId = toParticipant || null; // desde mercado o participante
+      sellerId = toParticipant || null;
       buyerId = fromParticipant;
     } else if (action === "sell") {
       sellerId = fromParticipant;
-      buyerId = toParticipant || null;  // mercado o participante
+      buyerId = toParticipant || null;
     } else if (action === "clause") {
       sellerId = toParticipant;
       buyerId = fromParticipant;
@@ -121,8 +158,14 @@ export default function AddTransferModal({ isOpen, onClose, onTransferAdded }) {
       from_participant_id: sellerId,
       to_participant_id: buyerId,
       type: action,
-      amount: Number(amount)
+      amount: Number(amount),
     };
+
+    const involvesMarket = !fromParticipant || !toParticipant;
+    if (!involvesMarket && date && time) {
+      payload.date = date;
+      payload.time = time;
+    }
 
     console.log("📤 Enviando payload:", payload);
 
@@ -130,7 +173,7 @@ export default function AddTransferModal({ isOpen, onClose, onTransferAdded }) {
       const res = await fetch("/api/transfers", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
       });
 
       if (!res.ok) {
@@ -143,10 +186,13 @@ export default function AddTransferModal({ isOpen, onClose, onTransferAdded }) {
         description: `${player.name} registrado en ${action}`,
         status: "success",
         duration: 2000,
-        isClosable: true
+        isClosable: true,
       });
 
       if (onTransferAdded) onTransferAdded();
+
+      resetForm();
+
       onClose();
     } catch (err) {
       toast({
@@ -154,10 +200,13 @@ export default function AddTransferModal({ isOpen, onClose, onTransferAdded }) {
         description: err.message,
         status: "error",
         duration: 3000,
-        isClosable: true
+        isClosable: true,
       });
     }
   };
+
+  // ⚡ Deshabilitar fecha/hora si interviene el mercado
+  const isDateTimeDisabled = !fromParticipant || !toParticipant;
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} size="lg">
@@ -174,8 +223,10 @@ export default function AddTransferModal({ isOpen, onClose, onTransferAdded }) {
               value={fromParticipant}
               onChange={(e) => setFromParticipant(e.target.value)}
             >
-              {participants.map(p => (
-                <option key={p.id} value={p.id}>{p.name}</option>
+              {participants.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
               ))}
             </Select>
           </FormControl>
@@ -183,11 +234,14 @@ export default function AddTransferModal({ isOpen, onClose, onTransferAdded }) {
           {/* Acción */}
           <FormControl mb={3}>
             <FormLabel>Acción</FormLabel>
-            <Select value={action} onChange={(e) => {
-              setAction(e.target.value);
-              setPlayer(null);
-              setAmount("");
-            }}>
+            <Select
+              value={action}
+              onChange={(e) => {
+                setAction(e.target.value);
+                setPlayer(null);
+                setAmount("");
+              }}
+            >
               <option value="buy">Compra</option>
               <option value="sell">Venta</option>
               <option value="clause">Cláusula</option>
@@ -203,7 +257,6 @@ export default function AddTransferModal({ isOpen, onClose, onTransferAdded }) {
               onChange={(e) => setToParticipant(e.target.value)}
             >
               {participants
-                // ⚡ Convertimos ambos a string para comparar bien
                 .filter((p) => String(p.id) !== String(fromParticipant))
                 .map((p) => (
                   <option key={p.id} value={p.id}>
@@ -213,7 +266,6 @@ export default function AddTransferModal({ isOpen, onClose, onTransferAdded }) {
             </Select>
           </FormControl>
 
-
           {/* Jugador */}
           <FormControl mb={3}>
             <FormLabel>Jugador</FormLabel>
@@ -221,13 +273,15 @@ export default function AddTransferModal({ isOpen, onClose, onTransferAdded }) {
               placeholder="Selecciona jugador"
               value={player?.player_id || ""}
               onChange={(e) => {
-                const selected = availablePlayers.find(p =>
-                  String(p.player_id) === e.target.value || String(p.id) === e.target.value
+                const selected = availablePlayers.find(
+                  (p) =>
+                    String(p.player_id) === e.target.value ||
+                    String(p.id) === e.target.value
                 );
                 if (selected) handleSelectPlayer(selected);
               }}
             >
-              {availablePlayers.map(p => (
+              {availablePlayers.map((p) => (
                 <option key={p.player_id || p.id} value={p.player_id || p.id}>
                   {p.name} ({p.team_name || p.team}) - €
                   {p.market_value_num?.toLocaleString("es-ES")}
@@ -236,13 +290,14 @@ export default function AddTransferModal({ isOpen, onClose, onTransferAdded }) {
             </Select>
             {player && (
               <Text mt={1} fontSize="sm" color="gray.600">
-                Valor de mercado: €{player.market_value_num?.toLocaleString("es-ES")}
+                Valor de mercado: €
+                {player.market_value_num?.toLocaleString("es-ES")}
               </Text>
             )}
           </FormControl>
 
           {/* Precio */}
-          <FormControl>
+          <FormControl mb={3}>
             <FormLabel>Precio (€)</FormLabel>
             <Input
               type="number"
@@ -251,11 +306,47 @@ export default function AddTransferModal({ isOpen, onClose, onTransferAdded }) {
               min={player?.market_value_num || 0}
             />
           </FormControl>
+
+          {/* Fecha */}
+          <FormControl mb={3}>
+            <FormLabel>Fecha</FormLabel>
+            <Input
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              isDisabled={isDateTimeDisabled}
+            />
+          </FormControl>
+
+          {/* Hora */}
+          <FormControl mb={3}>
+            <FormLabel>Hora</FormLabel>
+            <Input
+              type="time"
+              value={time}
+              onChange={(e) => setTime(e.target.value)}
+              isDisabled={isDateTimeDisabled}
+            />
+          </FormControl>
         </ModalBody>
 
         <ModalFooter>
-          <Button variant="ghost" mr={3} onClick={onClose}>Cancelar</Button>
-          <Button colorScheme="teal" onClick={handleSave}>Guardar</Button>
+          <Button
+            variant="ghost"
+            mr={3}
+            onClick={() => {
+              resetForm();
+              onClose();
+            }}
+          >
+            Cancelar
+          </Button>
+          <Button
+            colorScheme="teal"
+            onClick={handleSave}
+          >
+            Guardar
+          </Button>
         </ModalFooter>
       </ModalContent>
     </Modal>

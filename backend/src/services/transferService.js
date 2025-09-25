@@ -73,12 +73,13 @@ function movePlayer(player_id, sellerId, buyerId, price, cb) {
         console.log(`🗑️ Eliminado de user_players (${this.changes} filas)`);
         if (buyerId) {
           db.run(
-            `INSERT OR REPLACE INTO participant_players (participant_id, player_id, status, joined_at)
-             VALUES (?, ?, 'reserve', CURRENT_TIMESTAMP)`,
+            `INSERT OR REPLACE INTO participant_players 
+             (participant_id, player_id, status, joined_at, clause_lock_until, is_clausulable)
+             VALUES (?, ?, 'reserve', CURRENT_TIMESTAMP, DATETIME('now', '+14 days'), 0)`,
             [buyerId, player_id],
             function (err2) {
               if (err2) return cb(err2);
-              console.log("✅ Insertado en participant_players");
+              console.log("✅ Insertado en participant_players con lock de 14 días");
               cb();
             }
           );
@@ -110,7 +111,6 @@ function movePlayer(player_id, sellerId, buyerId, price, cb) {
   }
 }
 
-// 🔹 Crear transferencia completa
 function create(transfer, cb) {
   const { player_id, from_participant_id, to_participant_id, type, amount } = transfer;
 
@@ -125,24 +125,43 @@ function create(transfer, cb) {
   const sellerId = from_participant_id || null;
   const buyerId = to_participant_id || null;
 
-  console.log(`🔄 Proceso: seller=${sellerId || "Mercado"}, buyer=${buyerId || "Mercado"}, amount=${amount}`);
+  console.log(
+    `🔄 Proceso: seller=${sellerId || "Mercado"}, buyer=${buyerId || "Mercado"}, amount=${amount}`
+  );
 
-  // 🔄 Dinero
   updateMoney(buyerId, -amount, (err) => {
     if (err) return cb(err);
 
     updateMoney(sellerId, amount, (err2) => {
       if (err2) return cb(err2);
 
-      // 🔄 Mover jugador
       movePlayer(player_id, sellerId, buyerId, amount, (err3) => {
         if (err3) return cb(err3);
 
-        // 🔄 Guardar transfer
         transferModel.create(transfer, (err4, result) => {
           if (err4) return cb(err4);
+
           console.log("📑 Transfer guardado en tabla transfers:", result);
-          cb(null, result);
+
+          // 🔒 Si es clausulazo, bloquear durante 14 días
+          if (type === "clause" && buyerId) {
+            const sql = `
+              UPDATE participant_players
+              SET is_clausulable = 0,
+                  clause_lock_until = datetime('now', '+14 days')
+              WHERE participant_id = ? AND player_id = ?
+            `;
+            db.run(sql, [buyerId, player_id], function (err5) {
+              if (err5) {
+                console.error("❌ Error bloqueando clausula:", err5.message);
+                return cb(err5);
+              }
+              console.log(`🔒 Jugador ${player_id} bloqueado hasta +14 días`);
+              cb(null, result);
+            });
+          } else {
+            cb(null, result);
+          }
         });
       });
     });

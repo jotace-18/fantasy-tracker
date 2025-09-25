@@ -16,6 +16,7 @@ import {
   ModalCloseButton,
   useDisclosure,
   Spinner,
+  Tooltip,
 } from "@chakra-ui/react";
 import { FORMATIONS, FORMATION_MAP } from "../utils/formations";
 import { Link } from "react-router-dom";
@@ -23,67 +24,56 @@ import PlayerSearch from "../components/PlayerSearch";
 import { WarningTwoIcon, InfoOutlineIcon } from "@chakra-ui/icons";
 import useCumulativeRankHistory from "../hooks/useCumulativeRankHistory";
 import CumulativeRankChart from "../components/CumulativeRankChart";
-import TransferLogDummy from "../components/TransferLogDummy";
 import PlayerTransferLog from "../components/PlayerTransferLog";
-
 
 export default function MyTeamPage() {
   const [formation, setFormation] = useState("4-3-3");
-  const [myPlayers, setMyPlayers] = useState([]); // plantilla cargada desde DB
-  const [selectedSlot, setSelectedSlot] = useState(null); // guarda { role, index }
-  const [lineup, setLineup] = useState({}); // NUEVO: { slotIndex: player }
-  const [money, setMoney] = useState(null); // 💰 Dinero del usuario
+  const [myPlayers, setMyPlayers] = useState([]);
+  const [selectedSlot, setSelectedSlot] = useState(null);
+  const [money, setMoney] = useState(null);
   const [refreshKey] = useState(0);
 
-  // Modal buscar jugadores (pool global)
+  // Modales
   const { isOpen, onOpen, onClose } = useDisclosure();
-  // Modal asignar jugador a slot del campo
   const {
     isOpen: isLineupOpen,
     onOpen: onLineupOpen,
     onClose: onLineupClose,
   } = useDisclosure();
-  // Id del usuario actual (Jc)
-  const myParticipantId = 8; // Hardcodeado para demo, ideal: obtener del contexto de usuario
-  const { history: cumulativeRankHistory, loading: loadingCumulativeRank } = useCumulativeRankHistory(myParticipantId);
 
-  // 📌 Cargar jugadores y formación persistente al montar el componente
+  // Id del usuario actual (hardcode por ahora)
+  const myParticipantId = 8;
+  const { history: cumulativeRankHistory, loading: loadingCumulativeRank } =
+    useCumulativeRankHistory(myParticipantId);
+
+  // 📌 Cargar jugadores y formación persistente
   useEffect(() => {
     fetchTeamAndPlayers();
   }, []);
 
-  // Cargar formación y jugadores
   const fetchTeamAndPlayers = async () => {
     try {
-      const teamId = 1; // ⚡ por ahora hardcodeado
-      // Obtener detalle del equipo (incluye formación)
-      const teamRes = await fetch(`http://localhost:4000/api/user-teams/${teamId}`);
+      const teamId = myParticipantId;
+
+      // Obtener formación
+      const teamRes = await fetch(`http://localhost:4000/api/participants/${teamId}`);
       if (teamRes.ok) {
         const teamData = await teamRes.json();
         if (teamData.formation) setFormation(teamData.formation);
       }
-      // Obtener jugadores del usuario
-      const res = await fetch(`http://localhost:4000/api/user-players/${teamId}`);
+
+      // Obtener plantilla (participant_players)
+      const res = await fetch(`/api/participant-players/${teamId}/team`);
       if (!res.ok) {
         console.warn("⚠️ No se encontraron jugadores:", res.status);
         setMyPlayers([]);
-        setLineup({});
         return;
       }
       const data = await res.json();
       setMyPlayers(Array.isArray(data) ? data : []);
-      // Reconstruir lineup persistente
-      const lineupFromDB = {};
-      (Array.isArray(data) ? data : []).forEach((pl) => {
-        if (pl.status === "XI" && pl.slot_index) {
-          lineupFromDB[pl.slot_index] = pl;
-        }
-      });
-      setLineup(lineupFromDB);
     } catch (err) {
       console.error("❌ Error cargando plantilla o formación:", err);
       setMyPlayers([]);
-      setLineup({});
     }
   };
 
@@ -91,7 +81,9 @@ export default function MyTeamPage() {
   useEffect(() => {
     async function fetchMoney() {
       try {
-        const res = await fetch(`http://localhost:4000/api/participants/${myParticipantId}/money`);
+        const res = await fetch(
+          `http://localhost:4000/api/participants/${myParticipantId}/money`
+        );
         if (res.ok) {
           const data = await res.json();
           setMoney(data.money);
@@ -105,7 +97,7 @@ export default function MyTeamPage() {
     fetchMoney();
   }, [myParticipantId]);
 
-  // Jugadores ordenados
+  // Ordenar jugadores
   const orderedPlayers = [...myPlayers].sort((a, b) => {
     const posOrder = { GK: 1, DEF: 2, MID: 3, FWD: 4 };
     if (posOrder[a.role] !== posOrder[b.role]) {
@@ -116,154 +108,128 @@ export default function MyTeamPage() {
 
   const positions = FORMATION_MAP[formation];
 
-  const lineupByRole = {};
-  orderedPlayers.forEach((pl) => {
-    if (pl.status === "XI") {
-      if (!lineupByRole[pl.role]) lineupByRole[pl.role] = [];
-      lineupByRole[pl.role].push(pl);
-    }
-  });
-
-
-  // Añadir jugador desde búsqueda global
+  // ➕ Añadir jugador
   const handleAddPlayer = async (player) => {
     try {
-      const teamId = 1;
-      // prevenir duplicados en frontend
+      const teamId = myParticipantId;
       if (myPlayers.some((pl) => pl.player_id === player.id)) {
         console.warn("⚠️ El jugador ya está en tu plantilla");
         return;
       }
 
-      const res = await fetch(`http://localhost:4000/api/user-players/${teamId}`, {
+      const res = await fetch(`/api/participant-players/${teamId}/team`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           player_id: player.id,
           buy_price: player.market_value_num || 0,
+          status: "R",
+          slot_index: null,
         }),
       });
       if (!res.ok) throw new Error("Error al añadir jugador");
 
-      // En vez de actualizar solo el estado local, recarga toda la plantilla
-  await fetchTeamAndPlayers();
+      await fetchTeamAndPlayers();
       onClose();
     } catch (err) {
       console.error("❌ Error añadiendo jugador:", err);
     }
   };
 
-  // Asignar jugador al XI y al slot concreto
-  // Asignar jugador al XI y slot concreto (persistente)
-  // Intercambiar jugador de reserva con el que está en el slot (swap)
+  // ⚽ Asignar jugador al XI
   const handleSetXI = async (player) => {
     try {
-      const teamId = 1;
+      const teamId = myParticipantId;
       if (!selectedSlot) return;
-      // Buscar si ya hay un jugador en ese slot
-      const prevPlayer = Object.values(lineup).find(
-        (pl) => pl.slot_index === selectedSlot.index && pl.status === "XI"
+
+      // Si había jugador en el slot → mandarlo a reserva
+      const prevPlayer = myPlayers.find(
+        (pl) => pl.slot_index === selectedSlot.index && pl.status === (selectedSlot.isBench ? "B" : "XI")
       );
-
-      // 1. Si hay jugador en el slot, pásalo a reserva (status: "R", slot_index: null)
       if (prevPlayer) {
-        await fetch(
-          `http://localhost:4000/api/user-players/${teamId}/${prevPlayer.player_id}/status`,
-          {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ status: "R", slot_index: null }),
-          }
-        );
-      }
-
-      // 2. Poner el nuevo jugador en el slot (status: XI, slot_index)
-      await fetch(
-        `http://localhost:4000/api/user-players/${teamId}/${player.player_id}/status`,
-        {
+        await fetch(`/api/participant-players/${teamId}/team/${prevPlayer.player_id}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ status: "XI", slot_index: selectedSlot.index }),
-        }
-      );
+          body: JSON.stringify({ status: "R", slot_index: null }),
+        });
+      }
 
-      // 3. Recargar plantilla y lineup
-  await fetchTeamAndPlayers();
+      // Nuevo jugador al XI o banquillo en slot
+      await fetch(`/api/participant-players/${teamId}/team/${player.player_id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: selectedSlot.isBench ? "B" : "XI", slot_index: selectedSlot.index }),
+      });
+
+      await fetchTeamAndPlayers();
       onLineupClose();
     } catch (err) {
       console.error("❌ Error actualizando status:", err);
     }
   };
 
-  // Eliminar jugador de la plantilla
+  // ❌ Eliminar jugador
   const handleRemovePlayer = async (playerId) => {
     try {
-      const teamId = 1;
-      const res = await fetch(
-        `http://localhost:4000/api/user-players/${teamId}/${playerId}`,
-        { method: "DELETE" }
-      );
+      const teamId = myParticipantId;
+      const res = await fetch(`/api/participant-players/${teamId}/team/${playerId}`, {
+        method: "DELETE",
+      });
       if (!res.ok) throw new Error("Error al eliminar jugador");
-
-      setMyPlayers((prev) => prev.filter((pl) => pl.player_id !== playerId));
+      await fetchTeamAndPlayers();
     } catch (err) {
       console.error("❌ Error eliminando jugador:", err);
     }
   };
 
-  // Maneja el cambio de formación, reasigna XI y pasa sobrantes a reserva respetando roles
+  // 🔄 Cambiar formación
   const handleFormationChange = async (e) => {
     const newFormation = e.target.value;
     setFormation(newFormation);
-    // Persistir en backend
     try {
-      const teamId = 1;
-      await fetch(`http://localhost:4000/api/user-teams/${teamId}/formation`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ formation: newFormation }),
-      });
+      await fetch(
+        `http://localhost:4000/api/participants/${myParticipantId}/formation`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ formation: newFormation }),
+        }
+      );
     } catch (err) {
-      // Error al actualizar formación, se ignora para UX fluida
-      console.warn("No se pudo actualizar la formación en el backend:", err);
+      console.warn("No se pudo actualizar la formación:", err);
     }
 
-    // 1. Calcular los slots de la nueva formación agrupados por rol
+    // Ajustar XI y reservas
     const newPositions = FORMATION_MAP[newFormation];
     const slotsByRole = {};
     newPositions.forEach((p, i) => {
       if (!slotsByRole[p.role]) slotsByRole[p.role] = [];
-      slotsByRole[p.role].push(i + 1); // slot_index empieza en 1
+      slotsByRole[p.role].push(i + 1);
     });
 
-    // 2. Obtener todos los XI actuales agrupados por rol
     const xiByRole = {};
     myPlayers.filter((pl) => pl.status === "XI").forEach((pl) => {
       if (!xiByRole[pl.role]) xiByRole[pl.role] = [];
       xiByRole[pl.role].push(pl);
     });
 
-    // 3. Para cada rol, asignar slots a los primeros N jugadores, el resto a reserva
     const updates = [];
     Object.entries(slotsByRole).forEach(([role, slotIndexes]) => {
       const players = xiByRole[role] || [];
-      // Ordenar por slot_index ascendente (o user_player_id)
       const sorted = [...players].sort((a, b) => (a.slot_index || 0) - (b.slot_index || 0));
       for (let i = 0; i < sorted.length; i++) {
         const pl = sorted[i];
         if (i < slotIndexes.length) {
-          // Asignar slot_index correspondiente y status XI
           updates.push(
-            fetch(`http://localhost:4000/api/user-players/1/${pl.player_id}/status`, {
+            fetch(`/api/participant-players/${myParticipantId}/team/${pl.player_id}`, {
               method: "PUT",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ status: "XI", slot_index: slotIndexes[i] }),
             })
           );
         } else {
-          // Pasar a reserva
           updates.push(
-            fetch(`http://localhost:4000/api/user-players/1/${pl.player_id}/status`, {
+            fetch(`/api/participant-players/${myParticipantId}/team/${pl.player_id}`, {
               method: "PUT",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ status: "R", slot_index: null }),
@@ -272,12 +238,12 @@ export default function MyTeamPage() {
         }
       }
     });
-    // Los XI de roles que no existen en la nueva formación también van a reserva
+
     Object.keys(xiByRole).forEach((role) => {
       if (!slotsByRole[role]) {
         xiByRole[role].forEach((pl) => {
           updates.push(
-            fetch(`http://localhost:4000/api/user-players/1/${pl.player_id}/status`, {
+            fetch(`/api/participant-players/${myParticipantId}/team/${pl.player_id}`, {
               method: "PUT",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ status: "R", slot_index: null }),
@@ -286,12 +252,12 @@ export default function MyTeamPage() {
         });
       }
     });
+
     await Promise.all(updates);
-    // Refrescar plantilla y lineup
     await fetchTeamAndPlayers();
   };
 
-  // Calcular valor de mercado total del XI
+    // Calcular valor de mercado XI
   const totalMarketValueXI = myPlayers
     .filter((pl) => pl.status === "XI")
     .reduce((sum, pl) => sum + (pl.market_value_num || 0), 0);
@@ -303,24 +269,28 @@ export default function MyTeamPage() {
           <Box as="span" fontSize="2xl" color="blue.400">
             <span role="img" aria-label="fútbol">⚽</span>
           </Box>
-          <Text fontSize="2xl" fontWeight="bold">
-            Mi Equipo Fantasy
-          </Text>
+          <Text fontSize="2xl" fontWeight="bold">Mi Equipo Fantasy</Text>
         </Flex>
-        <Box bg="blue.50" px={4} py={1} borderRadius="md" boxShadow="sm" display="flex" alignItems="center" gap={2}>
+        <Box
+          bg="blue.50"
+          px={4}
+          py={1}
+          borderRadius="md"
+          boxShadow="sm"
+          display="flex"
+          alignItems="center"
+          gap={2}
+        >
           <InfoOutlineIcon color="blue.400" />
-          <Text fontSize="md" color="blue.800" fontWeight="semibold">
-            Valor XI:
-          </Text>
+          <Text fontSize="md" color="blue.800" fontWeight="semibold">Valor XI:</Text>
           <Text fontSize="lg" color="blue.700" fontWeight="bold">
             €{totalMarketValueXI.toLocaleString("es-ES")}
           </Text>
         </Box>
       </Flex>
 
-      {/* Gráfica de posición + Log de traspasos */}
+      {/* Gráfica + dinero + log */}
       <Flex direction={{ base: "column", md: "row" }} gap={6} mb={8} align="stretch">
-        {/* Izquierda: solo la gráfica de posición y el card de dinero debajo */}
         <Box flex={2.5} minW={0}>
           {loadingCumulativeRank ? (
             <Flex justify="center" align="center" h="120px">
@@ -329,7 +299,6 @@ export default function MyTeamPage() {
           ) : (
             <>
               <CumulativeRankChart history={cumulativeRankHistory} />
-              {/* Card de dinero justo debajo de la gráfica */}
               <Flex justify="center" mt={4}>
                 <Box
                   bg="yellow.200"
@@ -344,11 +313,13 @@ export default function MyTeamPage() {
                   maxW="500px"
                   justifyContent="center"
                 >
-                  <Text fontSize="2xl" color="yellow.900" fontWeight="extrabold" letterSpacing="wide">
+                  <Text fontSize="2xl" color="yellow.900" fontWeight="extrabold">
                     Dinero actual
                   </Text>
                   <Text fontSize="4xl" color="yellow.700" fontWeight="black" ml={4}>
-                    {money === null ? <Spinner size="md" /> : `€${Number(money).toLocaleString("es-ES")}`}
+                    {money === null
+                      ? <Spinner size="md" />
+                      : `€${Number(money).toLocaleString("es-ES")}`}
                   </Text>
                 </Box>
               </Flex>
@@ -356,7 +327,6 @@ export default function MyTeamPage() {
           )}
         </Box>
 
-        {/* Derecha: log de traspasos */}
         <Box flex={1} minW="420px" maxW="520px">
           <PlayerTransferLog refreshKey={refreshKey} />
         </Box>
@@ -365,24 +335,16 @@ export default function MyTeamPage() {
       {/* Selector de formación */}
       <Flex mb={6} align="center" gap={3}>
         <Text fontWeight="semibold">Formación:</Text>
-        <Select
-          value={formation}
-          onChange={handleFormationChange}
-          maxW="200px"
-        >
+        <Select value={formation} onChange={handleFormationChange} maxW="200px">
           {FORMATIONS.map((f) => (
-            <option key={f} value={f}>
-              {f}
-            </option>
+            <option key={f} value={f}>{f}</option>
           ))}
         </Select>
       </Flex>
 
-
       <Flex gap={8}>
-        {/* Campo + banquillo y coach */}
+        {/* Campo */}
         <Box flex="1">
-          {/* Campo */}
           <Box
             bg="green.700"
             borderRadius="lg"
@@ -392,8 +354,9 @@ export default function MyTeamPage() {
             boxShadow="md"
           >
             {positions.map((p, i) => {
-              // Mostrar el jugador asignado al slot si existe en lineup
-              const playerForSlot = lineup[i + 1] || null;
+              const playerForSlot = myPlayers.find(
+                (pl) => pl.status === "XI" && pl.slot_index === i + 1
+              );
               return (
                 <PlayerSlot
                   key={i}
@@ -411,14 +374,13 @@ export default function MyTeamPage() {
             })}
           </Box>
 
-          {/* Banquillo y coach alineados horizontalmente debajo del campo */}
+          {/* Banquillo + Coach */}
           <HStack mt={6} spacing={12} align="flex-start" justify="center">
-            {/* Banquillo a la izquierda */}
             <VStack spacing={2} minW="340px">
-              <Text fontWeight="bold" fontSize="md" color="orange.600" mb={1} alignSelf="flex-start">Banquillo</Text>
+              <Text fontWeight="bold" fontSize="md" color="orange.600" mb={1}>Banquillo</Text>
               <HStack justify="flex-start" spacing={4}>
                 {Array.from({ length: 4 }).map((_, i) => {
-                  const benchPlayers = orderedPlayers.filter((pl) => pl.status === "B");
+                  const benchPlayers = myPlayers.filter((pl) => pl.status === "B");
                   const playerForBench = benchPlayers[i] || null;
                   return (
                     <PlayerSlot
@@ -436,12 +398,9 @@ export default function MyTeamPage() {
                 })}
               </HStack>
             </VStack>
-            {/* Coach a la derecha, separado */}
             <VStack spacing={2} minW="100px">
-              <Text fontWeight="bold" fontSize="md" color="purple.600" mb={1} alignSelf="flex-start">Coach</Text>
-              <Center>
-                <PlayerSlot role="Coach" isBench />
-              </Center>
+              <Text fontWeight="bold" fontSize="md" color="purple.600" mb={1}>Coach</Text>
+              <Center><PlayerSlot role="Coach" isBench /></Center>
             </VStack>
           </HStack>
         </Box>
@@ -450,9 +409,7 @@ export default function MyTeamPage() {
         <Box flex="1" p={4} bg="gray.50" borderRadius="md" boxShadow="sm">
           <Flex justify="space-between" align="center" mb={3}>
             <Text fontWeight="bold">📋 Mi plantilla</Text>
-            <Button colorScheme="blue" size="sm" onClick={onOpen}>
-              + Añadir jugador
-            </Button>
+            <Button colorScheme="blue" size="sm" onClick={onOpen}>+ Añadir jugador</Button>
           </Flex>
 
           {orderedPlayers.length === 0 ? (
@@ -462,16 +419,13 @@ export default function MyTeamPage() {
               {orderedPlayers.map((pl) => {
                 let statusLabel = "Reserva";
                 let statusColor = "gray.500";
-                if (pl.status === "XI") {
-                  statusLabel = "XI";
-                  statusColor = "green.600";
-                } else if (pl.status === "B") {
-                  statusLabel = "Banquillo";
-                  statusColor = "orange.500";
-                }
+                if (pl.status === "XI") { statusLabel = "XI"; statusColor = "green.600"; }
+                else if (pl.status === "B") { statusLabel = "Banquillo"; statusColor = "orange.500"; }
+                else if (pl.status === "R") { statusLabel = "Reserva"; statusColor = "gray.500"; }
+
                 return (
                   <HStack
-                    key={pl.user_player_id}
+                    key={pl.player_id}
                     justify="space-between"
                     p={2}
                     borderRadius="md"
@@ -479,10 +433,7 @@ export default function MyTeamPage() {
                     boxShadow="xs"
                   >
                     <Box>
-                      <Link
-                        to={`/players/${pl.player_id}`}
-                        style={{ color: "teal", fontWeight: "bold" }}
-                      >
+                      <Link to={`/players/${pl.player_id}`} style={{ color: "teal", fontWeight: "bold" }}>
                         {pl.name}
                       </Link>
                       <Text fontSize="sm" color="gray.600">
@@ -490,7 +441,16 @@ export default function MyTeamPage() {
                       </Text>
                     </Box>
                     <HStack>
-                      <Text color={statusColor} fontWeight="bold" fontSize="sm" borderWidth="1px" borderColor={statusColor} borderRadius="md" px={2} py={0.5}>
+                      <Text
+                        color={statusColor}
+                        fontWeight="bold"
+                        fontSize="sm"
+                        borderWidth="1px"
+                        borderColor={statusColor}
+                        borderRadius="md"
+                        px={2}
+                        py={0.5}
+                      >
                         {statusLabel}
                       </Text>
                       <Text color="blue.600">
@@ -511,8 +471,8 @@ export default function MyTeamPage() {
                         size="xs"
                         variant="outline"
                         onClick={async () => {
-                          const teamId = 1;
-                          await fetch(`http://localhost:4000/api/user-players/${teamId}/${pl.player_id}/status`, {
+                          const teamId = 8;
+                          await fetch(`/api/participant-players/${teamId}/team/${pl.player_id}`, {
                             method: "PUT",
                             headers: { "Content-Type": "application/json" },
                             body: JSON.stringify({ status: "R", slot_index: null }),
@@ -532,19 +492,17 @@ export default function MyTeamPage() {
         </Box>
       </Flex>
 
-      {/* Modal búsqueda de jugadores */}
+      {/* Modal búsqueda */}
       <Modal isOpen={isOpen} onClose={onClose} size="xl">
         <ModalOverlay />
         <ModalContent>
           <ModalHeader>🔍 Buscar jugador</ModalHeader>
           <ModalCloseButton />
-          <ModalBody>
-            <PlayerSearch onSelect={handleAddPlayer} />
-          </ModalBody>
+          <ModalBody><PlayerSearch onSelect={handleAddPlayer} /></ModalBody>
         </ModalContent>
       </Modal>
 
-      {/* Modal elegir jugador para un slot del campo */}
+      {/* Modal asignar jugador a slot */}
       <Modal isOpen={isLineupOpen} onClose={onLineupClose} size="lg">
         <ModalOverlay />
         <ModalContent>
@@ -552,35 +510,55 @@ export default function MyTeamPage() {
           <ModalCloseButton />
           <ModalBody>
             <VStack spacing={2} align="stretch">
-              {myPlayers
-                .filter(
-                  (pl) => pl.role === selectedSlot?.role && pl.status === "R"
-                )
-                .map((pl) => (
-                  <HStack
-                    key={pl.user_player_id}
-                    justify="space-between"
-                    p={2}
-                    borderRadius="md"
-                    bg="gray.100"
-                    _hover={{ bg: "gray.200", cursor: "pointer" }}
-                    onClick={() => handleSetXI(pl)}
-                  >
-                    <Text>
-                      {pl.name} ({pl.team_name})
-                    </Text>
-                    <Text color="blue.600">
-                      €{(pl.market_value_num || 0).toLocaleString("es-ES")}
-                    </Text>
-                  </HStack>
-                ))}
-              {myPlayers.filter(
-                (pl) => pl.role === selectedSlot?.role && pl.status === "R"
-              ).length === 0 && (
-                <Text color="gray.500">
-                  No tienes reservas para esta posición
-                </Text>
-              )}
+              {selectedSlot &&
+                myPlayers
+                  .filter((pl) => {
+                    if (pl.status !== "R") return false;
+                    if (selectedSlot.isBench) return true;
+                    // Filtrar por posición para slots de campo
+                    const posMap = {
+                      GK: ["POR", "GK", "Portero"],
+                      DEF: ["DEF", "Defensa"],
+                      MID: ["MID", "Mediocampista", "Centrocampista"],
+                      FWD: ["FWD", "Delantero"],
+                    };
+                    const slotRole = selectedSlot.role;
+                    const playerPos = (pl.position || "").toUpperCase();
+                    // Permitir si la posición del jugador coincide con el slot
+                    return posMap[slotRole]?.some((p) => playerPos.includes(p.toUpperCase()));
+                  })
+                  .map((pl) => (
+                    <HStack
+                      key={pl.player_id}
+                      justify="space-between"
+                      p={2}
+                      borderRadius="md"
+                      bg="gray.100"
+                      _hover={{ bg: "gray.200", cursor: "pointer" }}
+                      onClick={() => handleSetXI(pl)}
+                    >
+                      <Text>{pl.name} ({pl.team_name || pl.team})</Text>
+                      <Text color="blue.600">
+                        €{(pl.market_value_num || 0).toLocaleString("es-ES")}
+                      </Text>
+                    </HStack>
+                  ))}
+              {selectedSlot &&
+                myPlayers.filter((pl) => {
+                  if (pl.status !== "R") return false;
+                  if (selectedSlot.isBench) return true;
+                  const posMap = {
+                    GK: ["POR", "GK", "Portero"],
+                    DEF: ["DEF", "Defensa"],
+                    MID: ["MID", "Mediocampista", "Centrocampista"],
+                    FWD: ["FWD", "Delantero"],
+                  };
+                  const slotRole = selectedSlot.role;
+                  const playerPos = (pl.position || "").toUpperCase();
+                  return posMap[slotRole]?.some((p) => playerPos.includes(p.toUpperCase()));
+                }).length === 0 && (
+                  <Text color="gray.500">No tienes reservas disponibles para esta posición</Text>
+                )}
             </VStack>
           </ModalBody>
         </ModalContent>
@@ -589,11 +567,8 @@ export default function MyTeamPage() {
   );
 }
 
-// Slot individual
-import { Tooltip } from "@chakra-ui/react";
-
+// Helpers
 function getShortName(name = "") {
-  // Devuelve primer nombre + primer apellido, o inicial + apellido si es largo
   if (!name) return "";
   const parts = name.split(" ");
   if (parts.length === 1) return parts[0];
@@ -603,10 +578,10 @@ function getShortName(name = "") {
 
 function getRoleColor(role) {
   switch (role) {
-    case "GK": return "#3182ce"; // azul portero
-    case "DEF": return "#38a169"; // verde defensa
-    case "MID": return "#d69e2e"; // amarillo medio
-    case "FWD": return "#e53e3e"; // rojo delantero
+    case "GK": return "#3182ce";
+    case "DEF": return "#38a169";
+    case "MID": return "#d69e2e";
+    case "FWD": return "#e53e3e";
     default: return "gray.400";
   }
 }
@@ -639,7 +614,10 @@ function PlayerSlot({ role, index, x, y, player, isBench, onSelectSlot }) {
         top={isBench ? undefined : `${y}%`}
         transform={isBench ? undefined : "translate(-50%, -50%)"}
         cursor="pointer"
-        _hover={{ bg: player ? "gray.100" : "yellow.200", boxShadow: "0 0 0 4px #ecc94b55" }}
+        _hover={{
+          bg: player ? "gray.100" : "yellow.200",
+          boxShadow: "0 0 0 4px #ecc94b55",
+        }}
         boxShadow={shadow}
         transition="all 0.15s"
         onClick={onSelectSlot}
@@ -653,9 +631,7 @@ function PlayerSlot({ role, index, x, y, player, isBench, onSelectSlot }) {
         ) : (
           <VStack spacing={0}>
             <WarningTwoIcon color="yellow.500" boxSize={6} />
-            <Text fontSize="xs" color="yellow.700" fontWeight="bold">
-              Vacío
-            </Text>
+            <Text fontSize="xs" color="yellow.700" fontWeight="bold">Vacío</Text>
           </VStack>
         )}
       </Center>
@@ -663,5 +639,4 @@ function PlayerSlot({ role, index, x, y, player, isBench, onSelectSlot }) {
   );
 }
 
-// SUGERENCIA: Puedes añadir un resumen de puntos totales del XI, o un aviso si hay menos de 11 titulares, o un botón para autocompletar el XI con reservas disponibles.
 
