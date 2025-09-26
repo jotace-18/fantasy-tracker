@@ -1,3 +1,6 @@
+function addMoneyToParticipant(id, amount, cb) {
+  participantsModel.addMoneyToParticipant(id, amount, cb);
+}
 function getParticipantMoney(id, cb) {
   participantsModel.getParticipantMoney(id, cb);
 }
@@ -38,5 +41,6 @@ module.exports = {
   fetchLeaderboard,
   getParticipantById,
   getParticipantMoney,
-  editParticipantMoney
+  editParticipantMoney,
+  addMoneyToParticipant
 };

@@ -2,8 +2,8 @@
 const transferModel = require("../models/transferModel");
 const db = require("../db/db");
 
-const USER_TEAM_ID = 1; // tu equipo en user_players
-const SELF_PARTICIPANT_ID = 8; // tu id en participants
+//const USER_TEAM_ID = 1; // tu equipo en user_players
+//const SELF_PARTICIPANT_ID = 8; // tu id en participants
 
 // 🔹 Actualiza dinero
 function updateMoney(participantId, delta, cb) {
@@ -11,93 +11,34 @@ function updateMoney(participantId, delta, cb) {
     console.log("💰 Mercado: no se actualiza saldo");
     return cb();
   }
-
-  if (participantId == SELF_PARTICIPANT_ID) {
-    console.log(`💰 Update dinero en user_teams [USER_TEAM_ID=${USER_TEAM_ID}] delta=${delta}`);
-    db.run(
-      `UPDATE user_teams SET money = money + ? WHERE id = ?`,
-      [delta, USER_TEAM_ID],
-      function (err) {
-        if (err) return cb(err);
-        console.log(`✅ Dinero user_teams actualizado (${this.changes} filas)`);
-        cb();
-      }
-    );
-  } else {
-    console.log(`💰 Update dinero en participants [id=${participantId}] delta=${delta}`);
-    db.run(
-      `UPDATE participants SET money = money + ? WHERE id = ?`,
-      [delta, participantId],
-      function (err) {
-        if (err) return cb(err);
-        console.log(`✅ Dinero participants actualizado (${this.changes} filas)`);
-        cb();
-      }
-    );
-  }
+  console.log(`💰 Update dinero en participants [id=${participantId}] delta=${delta}`);
+  db.run(
+    `UPDATE participants SET money = money + ? WHERE id = ?`,
+    [delta, participantId],
+    function (err) {
+      if (err) return cb(err);
+      console.log(`✅ Dinero participants actualizado (${this.changes} filas)`);
+      cb();
+    }
+  );
 }
 
 // 🔹 Mueve jugador
 function movePlayer(player_id, sellerId, buyerId, price, cb) {
   console.log(`⚽ Moviendo jugador ${player_id} de ${sellerId || "Mercado"} → ${buyerId || "Mercado"}`);
-
-  if (buyerId == SELF_PARTICIPANT_ID) {
-    console.log("➡️  Compra usuario");
-    db.run(
-      `INSERT OR REPLACE INTO user_players (user_team_id, player_id, buy_price, buy_date, status)
-       VALUES (?, ?, ?, date('now'), 'R')`,
-      [USER_TEAM_ID, player_id, price],
-      (err) => {
-        if (err) return cb(err);
-        console.log("✅ Insertado en user_players");
-        if (sellerId) {
-          db.run(
-            `DELETE FROM participant_players WHERE participant_id = ? AND player_id = ?`,
-            [sellerId, player_id],
-            function (err2) {
-              if (err2) return cb(err2);
-              console.log(`🗑️ Eliminado de participant_players (${this.changes} filas)`);
-              cb();
-            }
-          );
-        } else cb();
-      }
-    );
-  } else if (sellerId == SELF_PARTICIPANT_ID) {
-    console.log("➡️  Vende usuario");
-    db.run(
-      `DELETE FROM user_players WHERE user_team_id = ? AND player_id = ?`,
-      [USER_TEAM_ID, player_id],
-      function (err) {
-        if (err) return cb(err);
-        console.log(`🗑️ Eliminado de user_players (${this.changes} filas)`);
-        if (buyerId) {
-          db.run(
-            `INSERT OR REPLACE INTO participant_players 
-             (participant_id, player_id, status, joined_at, clause_lock_until, is_clausulable)
-             VALUES (?, ?, 'reserve', CURRENT_TIMESTAMP, DATETIME('now', '+14 days'), 0)`,
-            [buyerId, player_id],
-            function (err2) {
-              if (err2) return cb(err2);
-              console.log("✅ Insertado en participant_players con lock de 14 días");
-              cb();
-            }
-          );
-        } else cb();
-      }
-    );
-  } else {
-    console.log("➡️  Entre participantes");
+  // Eliminar de participant_players del vendedor (si hay)
+  if (sellerId) {
     db.run(
       `DELETE FROM participant_players WHERE participant_id = ? AND player_id = ?`,
       [sellerId, player_id],
       function (err) {
         if (err) return cb(err);
         console.log(`🗑️ Eliminado de participant_players (${this.changes} filas)`);
+        // Insertar en participant_players del comprador (si hay)
         if (buyerId) {
           db.run(
             `INSERT OR REPLACE INTO participant_players (participant_id, player_id, status, joined_at)
-             VALUES (?, ?, 'reserve', CURRENT_TIMESTAMP)`,
+             VALUES (?, ?, 'R', CURRENT_TIMESTAMP)`,
             [buyerId, player_id],
             function (err2) {
               if (err2) return cb(err2);
@@ -108,6 +49,21 @@ function movePlayer(player_id, sellerId, buyerId, price, cb) {
         } else cb();
       }
     );
+  } else if (buyerId) {
+    // Solo hay comprador (compra al mercado)
+    db.run(
+      `INSERT OR REPLACE INTO participant_players (participant_id, player_id, status, joined_at)
+       VALUES (?, ?, 'R', CURRENT_TIMESTAMP)`,
+      [buyerId, player_id],
+      function (err2) {
+        if (err2) return cb(err2);
+        console.log("✅ Insertado en participant_players");
+        cb();
+      }
+    );
+  } else {
+    // Solo hay venta al mercado (eliminar del vendedor)
+    cb();
   }
 }
 
@@ -143,8 +99,8 @@ function create(transfer, cb) {
 
           console.log("📑 Transfer guardado en tabla transfers:", result);
 
-          // 🔒 Si es clausulazo, bloquear durante 14 días
-          if (type === "clause" && buyerId) {
+          // 🔒 Tras cualquier traspaso, bloquear cláusula 14 días y desactivar clausulable
+          if (buyerId) {
             const sql = `
               UPDATE participant_players
               SET is_clausulable = 0,

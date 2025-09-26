@@ -44,11 +44,13 @@ function updateClauseValue(req, res) {
   const { id, playerId } = req.params;
   let { clause_value } = req.body;
   clause_value = Number(clause_value);
+  console.log(`[DEBUG] PATCH /clause: participant_id=${id}, player_id=${playerId}, clause_value=${clause_value}`);
   if (isNaN(clause_value)) {
     return res.status(400).json({ error: "clause_value requerido" });
   }
   service.updateClauseValue(id, playerId, clause_value, (err, result) => {
     if (err) return res.status(400).json({ error: err.message });
+    console.log(`[DEBUG] PATCH /clause result:`, result);
     res.json(result);
   });
 }
@@ -64,8 +66,10 @@ function updateClausulable(req, res) {
   } else {
     return res.status(400).json({ error: "is_clausulable debe ser 0 o 1" });
   }
+  console.log(`[DEBUG] PATCH /clausulable: participant_id=${id}, player_id=${playerId}, is_clausulable=${is_clausulable}`);
   service.updateClausulable(id, playerId, is_clausulable, (err, result) => {
     if (err) return res.status(400).json({ error: err.message });
+    console.log(`[DEBUG] PATCH /clausulable result:`, result);
     res.json(result);
   });
 }
@@ -78,8 +82,10 @@ function updateClauseLock(req, res) {
   hours = Number(hours) || 0;
   const totalMs = (days * 24 + hours) * 60 * 60 * 1000;
   const clause_lock_until = new Date(Date.now() + totalMs).toISOString();
+  console.log(`[DEBUG] PATCH /clause-lock: participant_id=${id}, player_id=${playerId}, days=${days}, hours=${hours}, clause_lock_until=${clause_lock_until}`);
   service.updateClauseLock(id, playerId, clause_lock_until, (err, result) => {
     if (err) return res.status(400).json({ error: err.message });
+    console.log(`[DEBUG] PATCH /clause-lock result:`, result);
     res.json(result);
   });
 }

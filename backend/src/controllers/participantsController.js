@@ -1,3 +1,18 @@
+// POST /api/participants/:id/add-money
+function addMoney(req, res) {
+  const { id } = req.params;
+  const { amount } = req.body;
+  if (typeof amount !== 'number' || isNaN(amount)) {
+    return res.status(400).json({ error: 'amount debe ser un número' });
+  }
+  participantsService.addMoneyToParticipant(id, amount, (err, result) => {
+    if (err) {
+      console.error(`[Controller] Error en addMoney:`, err.message);
+      return res.status(400).json({ error: err.message });
+    }
+    res.json(result);
+  });
+}
 // GET /api/participants/:id/money
 function getMoney(req, res) {
   const { id } = req.params;
@@ -96,4 +111,4 @@ function getLeaderboard(req, res) {
   });
 }
 
-module.exports = { add, list, updatePoints, remove, getLeaderboard, getById, getMoney, updateMoney };
+module.exports = { add, list, updatePoints, remove, getLeaderboard, getById, getMoney, updateMoney, addMoney };

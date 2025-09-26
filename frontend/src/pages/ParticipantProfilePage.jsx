@@ -1,4 +1,5 @@
-import { Box, Heading, Text, Flex, Badge, Spinner, Divider, Button, useDisclosure, Modal, ModalOverlay, ModalContent, ModalHeader, ModalBody, ModalCloseButton } from "@chakra-ui/react";
+import { Box, Heading, Text, Flex, Badge, Spinner, Divider, Button, useDisclosure, Modal, ModalOverlay, ModalContent, ModalHeader, ModalBody, ModalCloseButton, Input, VStack } from "@chakra-ui/react";
+import { EditIcon } from "@chakra-ui/icons";
 import { useParams } from "react-router-dom";
 import PlayerSearch from "../components/PlayerSearch";
 import EditablePlayerRow from "./EditablePlayerRow";
@@ -21,6 +22,8 @@ export default function ParticipantProfilePage() {
   // Ordenación
   const [sortBy, setSortBy] = useState("total_points");
   const [order, setOrder] = useState("DESC");
+  // Modal editar dinero
+  const [moneyEdit, setMoneyEdit] = useState({ open: false, value: "" });
 
   const fetchParticipant = async () => {
     setLoading(true);
@@ -38,6 +41,25 @@ export default function ParticipantProfilePage() {
     } catch (err) {
       setError(err.message);
       setLoading(false);
+    }
+  };
+
+  // Guardar dinero editado
+  const handleSaveMoney = async () => {
+    const newMoney = Number(moneyEdit.value);
+    if (isNaN(newMoney)) return;
+    try {
+      const res = await fetch(`/api/participants/${id}/money`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ money: newMoney })
+      });
+      if (res.ok) {
+        setParticipant((prev) => ({ ...prev, money: newMoney }));
+        setMoneyEdit({ open: false, value: "" });
+      }
+    } catch {
+      // Error handling intentionally left blank
     }
   };
   useEffect(() => {
@@ -152,16 +174,48 @@ export default function ParticipantProfilePage() {
         {/* Main participant card (left column) */}
         <Box flex={3} minW={0} bg="white" borderRadius="lg" boxShadow="md" p={{ base: 4, md: 10 }}>
           <Heading size="lg" mb={2} textAlign="center">{participant.name}</Heading>
-          <Flex gap={3} mb={4} align="center" justify="center">
-            <Badge colorScheme="blue" fontSize="lg" px={3} py={1} borderRadius="md">{participant.total_points} pts</Badge>
-            <Badge colorScheme="green" px={3} py={1} borderRadius="md">${participant.money}</Badge>
-            <Badge colorScheme="gray" px={3} py={1} borderRadius="md">
+          <Flex gap={6} mb={6} align="center" justify="center" wrap="wrap">
+            <Badge colorScheme="blue" fontSize="2xl" px={5} py={2} borderRadius="lg" boxShadow="md">
+              {participant.total_points} pts
+            </Badge>
+            <Flex align="center" gap={2}>
+              <Badge colorScheme="green" fontSize="2xl" px={5} py={2} borderRadius="lg" boxShadow="md">
+                €{Number(participant.money).toLocaleString("es-ES")}
+              </Badge>
+              <Button size="sm" variant="ghost" onClick={() => setMoneyEdit({ open: true, value: participant.money })}>
+                <EditIcon color="green.700" boxSize={6} />
+              </Button>
+            </Flex>
+            <Badge colorScheme="gray" fontSize="2xl" px={5} py={2} borderRadius="lg" boxShadow="md">
               {loadingPosition ? "Cargando posición..." : position ? `Posición: ${position}` : "Sin ranking"}
             </Badge>
-            <Badge colorScheme="purple" px={3} py={1} borderRadius="md">
+            <Badge colorScheme="purple" fontSize="2xl" px={5} py={2} borderRadius="lg" boxShadow="md">
               Valor plantilla: {plantillaValue.toLocaleString("es-ES")} €
             </Badge>
           </Flex>
+      {/* Modal editar dinero */}
+      <Modal isOpen={moneyEdit.open} onClose={() => setMoneyEdit({ open: false, value: '' })} size="sm">
+        <ModalOverlay />
+        <ModalContent>
+          <ModalHeader>Editar dinero</ModalHeader>
+          <ModalCloseButton />
+          <ModalBody>
+            <VStack spacing={4} align="stretch">
+              <Text fontWeight="bold">Nuevo dinero (€):</Text>
+              <Input
+                type="number"
+                min={0}
+                value={moneyEdit.value}
+                onChange={e => setMoneyEdit(edit => ({ ...edit, value: e.target.value }))}
+                style={{ width: 180, fontSize: 18, padding: 4, border: '1px solid #CBD5E1', borderRadius: 6 }}
+              />
+              <Button colorScheme="green" onClick={handleSaveMoney}>
+                Guardar
+              </Button>
+            </VStack>
+          </ModalBody>
+        </ModalContent>
+      </Modal>
           <Divider my={4} />
           <Box mb={8}>
             <Flex direction={{ base: "column", md: "row" }} gap={6}>
@@ -199,7 +253,6 @@ export default function ParticipantProfilePage() {
                       <th style={{ fontWeight: 700, padding: '10px 8px', borderBottom: '2px solid #cbd5e1', textAlign: 'right', cursor: 'pointer' }} onClick={() => handleSort('market_value_num', 'DESC')}>Valor Mercado{renderArrow('market_value_num')}</th>
                       <th style={{ fontWeight: 700, padding: '10px 8px', borderBottom: '2px solid #cbd5e1', textAlign: 'right', cursor: 'pointer' }} onClick={() => handleSort('clause_value', 'DESC')}>Cláusula{renderArrow('clause_value')}</th>
                       <th style={{ fontWeight: 700, padding: '10px 8px', borderBottom: '2px solid #cbd5e1', textAlign: 'center', cursor: 'pointer' }} onClick={() => handleSort('is_clausulable', 'DESC')}>Clausulable{renderArrow('is_clausulable')}</th>
-                      <th style={{ fontWeight: 700, padding: '10px 8px', borderBottom: '2px solid #cbd5e1', textAlign: 'center' }}>Tiempo Expira</th>
                       <th style={{ fontWeight: 700, padding: '10px 8px', borderBottom: '2px solid #cbd5e1', textAlign: 'right', cursor: 'pointer' }} onClick={() => handleSort('total_points', 'DESC')}>Puntos{renderArrow('total_points')}</th>
                       <th style={{ fontWeight: 700, padding: '10px 8px', borderBottom: '2px solid #cbd5e1', textAlign: 'center' }}>Acciones</th>
                     </tr>

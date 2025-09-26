@@ -9,9 +9,9 @@ function getAll(cb) {
       tr.player_id,
       p.name AS player_name,
       tr.from_participant_id,
-      COALESCE(fp.name, ut_from.name) AS from_name,
+      fp.name AS from_name,
       tr.to_participant_id,
-      COALESCE(tp.name, ut_to.name) AS to_name,
+      tp.name AS to_name,
       tr.type,
       tr.amount,
       tr.clause_value,
@@ -20,8 +20,6 @@ function getAll(cb) {
     JOIN players p ON tr.player_id = p.id
     LEFT JOIN participants fp ON tr.from_participant_id = fp.id
     LEFT JOIN participants tp ON tr.to_participant_id = tp.id
-    LEFT JOIN user_teams ut_from ON tr.from_participant_id = ut_from.id AND ut_from.is_self = 1
-    LEFT JOIN user_teams ut_to ON tr.to_participant_id = ut_to.id AND ut_to.is_self = 1
     ORDER BY tr.transfer_date DESC
   `;
   db.all(sql, [], (err, rows) => {

@@ -8,30 +8,30 @@ import {
   HStack,
   Center,
   Button,
-  Modal,
-  ModalOverlay,
-  ModalContent,
-  ModalHeader,
-  ModalBody,
-  ModalCloseButton,
   useDisclosure,
   Spinner,
   Tooltip,
 } from "@chakra-ui/react";
+import ClauseLockModal from "../components/ClauseLockModal";
 import { FORMATIONS, FORMATION_MAP } from "../utils/formations";
 import { Link } from "react-router-dom";
 import PlayerSearch from "../components/PlayerSearch";
 import { WarningTwoIcon, InfoOutlineIcon } from "@chakra-ui/icons";
+import { EditIcon } from "@chakra-ui/icons";
 import useCumulativeRankHistory from "../hooks/useCumulativeRankHistory";
 import CumulativeRankChart from "../components/CumulativeRankChart";
 import PlayerTransferLog from "../components/PlayerTransferLog";
 
 export default function MyTeamPage() {
+  const [, setNow] = useState(Date.now());
   const [formation, setFormation] = useState("4-3-3");
   const [myPlayers, setMyPlayers] = useState([]);
   const [selectedSlot, setSelectedSlot] = useState(null);
   const [money, setMoney] = useState(null);
   const [refreshKey] = useState(0);
+  const [moneyEdit, setMoneyEdit] = useState({ open: false, value: '' });
+  const [clauseEdit, setClauseEdit] = useState({ open: false, player: null });
+  const [clauseForm, setClauseForm] = useState({ clause_value: '', is_clausulable: false, lock_days: 0, lock_hours: 0 });
 
   // Modales
   const { isOpen, onOpen, onClose } = useDisclosure();
@@ -71,13 +71,37 @@ export default function MyTeamPage() {
       }
       const data = await res.json();
       setMyPlayers(Array.isArray(data) ? data : []);
+      // Actualizar timers de lock
+      const timers = {};
+      (Array.isArray(data) ? data : []).forEach((pl) => {
+        if (pl.clause_lock_until && !pl.is_clausulable) {
+          timers[pl.player_id] = new Date(pl.clause_lock_until).getTime();
+        }
+      });
+  // setLockTimers eliminado: ya no se usa estado para timers
     } catch (err) {
       console.error("❌ Error cargando plantilla o formación:", err);
       setMyPlayers([]);
     }
   };
 
-  // Cargar dinero del usuario
+  // Forzar re-render cada segundo para actualizar los timers en pantalla
+  useEffect(() => {
+    const interval = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(interval);
+  }, []);
+// Helper para mostrar ms como HH:MM:SS
+function msToHMS(ms) {
+  const totalSec = Math.floor(ms / 1000);
+  const d = Math.floor(totalSec / 86400);
+  const h = Math.floor((totalSec % 86400) / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  let str = '';
+  if (d > 0) str += `${d}d `;
+  str += [h, m, s].map((v) => v.toString().padStart(2, '0')).join(':');
+  return str;
+}
   useEffect(() => {
     async function fetchMoney() {
       try {
@@ -96,6 +120,25 @@ export default function MyTeamPage() {
     }
     fetchMoney();
   }, [myParticipantId]);
+
+  // Guardar dinero editado
+  const handleSaveMoney = async () => {
+    const newMoney = Number(moneyEdit.value);
+    if (isNaN(newMoney)) return;
+    try {
+      const res = await fetch(`http://localhost:4000/api/participants/${myParticipantId}/money`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ money: newMoney })
+      });
+      if (res.ok) {
+        setMoney(newMoney);
+        setMoneyEdit({ open: false, value: '' });
+      }
+    } catch {
+      // Error updating money, ignored
+    }
+  };
 
   // Ordenar jugadores
   const orderedPlayers = [...myPlayers].sort((a, b) => {
@@ -316,19 +359,50 @@ export default function MyTeamPage() {
                   <Text fontSize="2xl" color="yellow.900" fontWeight="extrabold">
                     Dinero actual
                   </Text>
-                  <Text fontSize="4xl" color="yellow.700" fontWeight="black" ml={4}>
-                    {money === null
-                      ? <Spinner size="md" />
-                      : `€${Number(money).toLocaleString("es-ES")}`}
-                  </Text>
+                  <Flex align="center" gap={2}>
+                    <Text fontSize="4xl" color="yellow.700" fontWeight="black" ml={4}>
+                      {money === null
+                        ? <Spinner size="md" />
+                        : `€${Number(money).toLocaleString("es-ES")}`}
+                    </Text>
+                    {money !== null && (
+                      <Button size="xs" variant="ghost" onClick={() => setMoneyEdit({ open: true, value: money })}>
+                        <EditIcon color="yellow.700" />
+                      </Button>
+                    )}
+                  </Flex>
                 </Box>
               </Flex>
+      {/* Modal editar dinero */}
+      <Modal isOpen={moneyEdit.open} onClose={() => setMoneyEdit({ open: false, value: '' })} size="sm">
+        <ModalOverlay />
+        <ModalContent>
+          <ModalHeader>Editar dinero</ModalHeader>
+          <ModalCloseButton />
+          <ModalBody>
+            <VStack spacing={4} align="stretch">
+              <Text fontWeight="bold">Nuevo dinero (€):</Text>
+              <input
+                type="number"
+                min={0}
+                value={moneyEdit.value}
+                onChange={e => setMoneyEdit(edit => ({ ...edit, value: e.target.value }))}
+                style={{ width: 180, fontSize: 18, padding: 4, border: '1px solid #CBD5E1', borderRadius: 6 }}
+              />
+              <Button colorScheme="yellow" onClick={handleSaveMoney}>
+                Guardar
+              </Button>
+            </VStack>
+          </ModalBody>
+        </ModalContent>
+      </Modal>
             </>
           )}
         </Box>
 
         <Box flex={1} minW="420px" maxW="520px">
-          <PlayerTransferLog refreshKey={refreshKey} />
+          {/* Log individual: solo traspasos donde participa el usuario */}
+          <PlayerTransferLog refreshKey={refreshKey} participantId={myParticipantId} />
         </Box>
       </Flex>
 
@@ -423,6 +497,15 @@ export default function MyTeamPage() {
                 else if (pl.status === "B") { statusLabel = "Banquillo"; statusColor = "orange.500"; }
                 else if (pl.status === "R") { statusLabel = "Reserva"; statusColor = "gray.500"; }
 
+                // Calcular tiempo restante de lock
+                let lockMs = 0;
+                if (pl.clause_lock_until && !pl.is_clausulable) {
+                  lockMs = Math.max(0, new Date(pl.clause_lock_until).getTime() - Date.now());
+                }
+                const lockStr = lockMs > 0 ? msToHMS(lockMs) : null;
+                const minClause = pl.market_value_num || 0;
+
+                // Mover cláusula y lápiz entre valor de mercado y puntos
                 return (
                   <HStack
                     key={pl.player_id}
@@ -456,6 +539,49 @@ export default function MyTeamPage() {
                       <Text color="blue.600">
                         €{(pl.market_value_num || 0).toLocaleString("es-ES")}
                       </Text>
+                      {/* Switch visual: lock o cláusula, con lápiz siempre */}
+                      <HStack spacing={1}>
+                        <Box
+                          px={3}
+                          py={1}
+                          borderRadius="full"
+                          bg={lockStr ? "purple.100" : "purple.50"}
+                          borderWidth={lockStr ? "2px" : "1px"}
+                          borderColor={lockStr ? "purple.400" : "purple.200"}
+                          display="flex"
+                          alignItems="center"
+                          minW="80px"
+                          justifyContent="center"
+                        >
+                          {lockStr ? (
+                            <Text color="purple.600" fontWeight="bold" fontSize="sm">{lockStr}</Text>
+                          ) : (
+                            <Text color="purple.700" fontWeight="bold" fontSize="sm">
+                              €{(pl.clause_value || minClause).toLocaleString("es-ES")}
+                            </Text>
+                          )}
+                        </Box>
+                        <Button size="xs" variant="ghost" ml={0} onClick={() => {
+                          // Calcular días y horas actuales de lock
+                          let lock_days = 0, lock_hours = 0;
+                          if (pl.clause_lock_until && !pl.is_clausulable) {
+                            const now = Date.now();
+                            const until = new Date(pl.clause_lock_until).getTime();
+                            let diffMs = Math.max(0, until - now);
+                            lock_days = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+                            lock_hours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+                          }
+                          setClauseEdit({ open: true, player: pl });
+                          setClauseForm({
+                            clause_value: pl.clause_value || minClause,
+                            is_clausulable: !!pl.is_clausulable,
+                            lock_days,
+                            lock_hours
+                          });
+                        }}>
+                          <span role="img" aria-label="Editar">✏️</span>
+                        </Button>
+                      </HStack>
                       <Text color={pl.total_points < 0 ? "red.500" : "green.600"}>
                         {pl.total_points} pts
                       </Text>
@@ -487,6 +613,40 @@ export default function MyTeamPage() {
                   </HStack>
                 );
               })}
+      <ClauseLockModal
+        isOpen={clauseEdit.open}
+        onClose={() => setClauseEdit({ open: false, player: null })}
+        player={clauseEdit.player}
+        clauseForm={clauseForm}
+        setClauseForm={setClauseForm}
+        onSave={async () => {
+          const teamId = 8;
+          const { clause_value, is_clausulable, lock_days, lock_hours } = clauseForm;
+          const playerId = clauseEdit.player.player_id;
+          // Actualizar valor de cláusula
+          await fetch(`/api/participant-players/${teamId}/team/${playerId}/clause`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ clause_value: Math.max(Number(clause_value), clauseEdit.player.market_value_num || 0) }),
+          });
+          // Actualizar clausulabilidad
+          await fetch(`/api/participant-players/${teamId}/team/${playerId}/clausulable`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ is_clausulable: is_clausulable ? 1 : 0 }),
+          });
+          // Si no es clausulable, actualizar lock
+          if (!is_clausulable) {
+            await fetch(`/api/participant-players/${teamId}/team/${playerId}/clause-lock`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ days: Number(lock_days) || 0, hours: Number(lock_hours) || 0 }),
+            });
+          }
+          setClauseEdit({ open: false, player: null });
+          await fetchTeamAndPlayers();
+        }}
+      />
             </VStack>
           )}
         </Box>
@@ -512,21 +672,7 @@ export default function MyTeamPage() {
             <VStack spacing={2} align="stretch">
               {selectedSlot &&
                 myPlayers
-                  .filter((pl) => {
-                    if (pl.status !== "R") return false;
-                    if (selectedSlot.isBench) return true;
-                    // Filtrar por posición para slots de campo
-                    const posMap = {
-                      GK: ["POR", "GK", "Portero"],
-                      DEF: ["DEF", "Defensa"],
-                      MID: ["MID", "Mediocampista", "Centrocampista"],
-                      FWD: ["FWD", "Delantero"],
-                    };
-                    const slotRole = selectedSlot.role;
-                    const playerPos = (pl.position || "").toUpperCase();
-                    // Permitir si la posición del jugador coincide con el slot
-                    return posMap[slotRole]?.some((p) => playerPos.includes(p.toUpperCase()));
-                  })
+                  .filter((pl) => pl.status === "R")
                   .map((pl) => (
                     <HStack
                       key={pl.player_id}
@@ -544,20 +690,8 @@ export default function MyTeamPage() {
                     </HStack>
                   ))}
               {selectedSlot &&
-                myPlayers.filter((pl) => {
-                  if (pl.status !== "R") return false;
-                  if (selectedSlot.isBench) return true;
-                  const posMap = {
-                    GK: ["POR", "GK", "Portero"],
-                    DEF: ["DEF", "Defensa"],
-                    MID: ["MID", "Mediocampista", "Centrocampista"],
-                    FWD: ["FWD", "Delantero"],
-                  };
-                  const slotRole = selectedSlot.role;
-                  const playerPos = (pl.position || "").toUpperCase();
-                  return posMap[slotRole]?.some((p) => playerPos.includes(p.toUpperCase()));
-                }).length === 0 && (
-                  <Text color="gray.500">No tienes reservas disponibles para esta posición</Text>
+                myPlayers.filter((pl) => pl.status === "R").length === 0 && (
+                  <Text color="gray.500">No tienes reservas disponibles</Text>
                 )}
             </VStack>
           </ModalBody>

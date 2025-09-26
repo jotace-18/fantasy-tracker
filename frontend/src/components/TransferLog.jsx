@@ -1,6 +1,7 @@
 // components/TransferLog.jsx
 import { useState, useEffect } from "react";
 import { Box, Text, Flex, Spinner } from "@chakra-ui/react";
+import { FaGavel, FaStore, FaHandshake } from "react-icons/fa";
 import { Link, useNavigate } from "react-router-dom";
 
 export default function TransferLog({ refreshKey, participantId }) {
@@ -32,16 +33,54 @@ export default function TransferLog({ refreshKey, participantId }) {
   }, [refreshKey, participantId]);
 
   const getColor = (type, fromName, toName, fromId, toId) => {
-    // Si interviene el mercado (id null)
-    if (fromId == null || toId == null) {
-      return { bg: "#ffb347", border: "4px solid #b45309", text: "white" };
+    // Mercado a jugador (compra)
+    if (fromId == null && toId != null) {
+      if (String(toId) === String(myParticipantId)) {
+        // 3º De mercado a jugador (compra) (igual a id = 8): naranja oscuro
+        return { bg: "#ff9800", border: "4px solid #b45309", text: "white" };
+      } else {
+        // 1º De mercado a jugador (compra) (diferente de id = 8): naranjita claro
+        return { bg: "#ffe0b2", border: "4px solid #ffb347", text: "#b45309" };
+      }
     }
-    switch (type) {
-      case "buy": return { bg: "yellow.50", border: "4px solid #eab308", text: "yellow.700" };
-      case "sell": return { bg: "purple.50", border: "4px solid #a259e6", text: "purple.700" };
-      case "clause": return { bg: "red.50", border: "4px solid #dc2626", text: "red.700" };
-      default: return { bg: "blue.50", border: "4px solid #0284c7", text: "blue.700" };
+    // Jugador a mercado (venta)
+    if (toId == null && fromId != null) {
+      if (String(fromId) === String(myParticipantId)) {
+        // 4º De mercado a jugador (venta) (igual a id = 8): azul oscuro
+        return { bg: "#1976d2", border: "4px solid #0d47a1", text: "white" };
+      } else {
+        // 2º De jugador a mercado (venta) (diferente de id = 8): azul claro
+        return { bg: "#bbdefb", border: "4px solid #1976d2", text: "#0d47a1" };
+      }
     }
+    // Clausulazos
+    if (type === "clause") {
+      if (String(fromId) === String(myParticipantId)) {
+        // 10º de jugadorA clausulazo id=8 (rojito)
+        return { bg: "#ffebee", border: "4px solid #c62828", text: "#b71c1c", fontWeight: "bold" };
+      } else if (String(toId) === String(myParticipantId)) {
+        // 9º De id=8 clausulazo a jugadorA(morado y fuerte)
+        return { bg: "#7c3aed", border: "4px solid #4c1d95", text: "white", fontWeight: "bold" };
+      } else {
+        // Clausulazo entre otros
+        return { bg: "#ede9fe", border: "4px solid #7c3aed", text: "#4c1d95", fontWeight: "bold" };
+      }
+    }
+    // JugadorA a jugadorB
+    if (fromId != null && toId != null) {
+      if (String(fromId) === String(myParticipantId)) {
+        // 8º De id=8 a jugadorA(el color que quieras)
+        return { bg: "#fffde7", border: "4px solid #fbc02d", text: "#f57c00", fontWeight: "bold" };
+      } else if (String(toId) === String(myParticipantId)) {
+        // 6º De jugadorA a id=8(el mismo color de 5º pero más fuerte)
+        return { bg: "#c6f6d5", border: "4px solid #2f855a", text: "#22543d", fontWeight: "bold" };
+      } else {
+        // 5º De jugadorA a jugadorB(el color que quieras)
+        return { bg: "#e0e7ff", border: "4px solid #2563eb", text: "#1e3a8a" };
+      }
+    }
+    // Default
+    return { bg: "#f3f4f6", border: "4px solid #6b7280", text: "#111827" };
   };
 
   const participantLink = (id, name) => {
@@ -87,7 +126,46 @@ export default function TransferLog({ refreshKey, participantId }) {
                   {participantLink(t.from_participant_id, t.from_name)} → {participantLink(t.to_participant_id, t.to_name)}
                 </Text>
                 <Text fontSize="sm" color="gray.500">
-                  {new Date(t.transfer_date).toLocaleDateString("es-ES")}
+                  {(() => {
+                    // Clausulazo
+                    if (t.type === "clause") {
+                      return (
+                        <span title="Clausulazo" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <FaGavel style={{ color: '#7c3aed', fontSize: 18, marginRight: 4, verticalAlign: 'middle' }} />
+                          <b>Clausulazo</b>
+                          <span style={{ marginLeft: 8, fontWeight: 400 }}>
+                            {new Date(t.transfer_date).toLocaleDateString("es-ES")}
+                          </span>
+                        </span>
+                      );
+                    }
+                    // Mercado
+                    if ((t.from_participant_id == null && t.to_participant_id != null) || (t.to_participant_id == null && t.from_participant_id != null)) {
+                      return (
+                        <span title="Mercado" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <FaStore style={{ color: '#b45309', fontSize: 18, marginRight: 4, verticalAlign: 'middle' }} />
+                          <b>Mercado</b>
+                          <span style={{ marginLeft: 8, fontWeight: 400 }}>
+                            {new Date(t.transfer_date).toLocaleDateString("es-ES")}
+                          </span>
+                        </span>
+                      );
+                    }
+                    // Acuerdo entre jugadores (no clausulazo)
+                    if (t.from_participant_id != null && t.to_participant_id != null && t.type !== "clause") {
+                      return (
+                        <span title="Acuerdo" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <FaHandshake style={{ color: '#2563eb', fontSize: 18, marginRight: 4, verticalAlign: 'middle' }} />
+                          <b>Acuerdo</b>
+                          <span style={{ marginLeft: 8, fontWeight: 400 }}>
+                            {new Date(t.transfer_date).toLocaleDateString("es-ES")}
+                          </span>
+                        </span>
+                      );
+                    }
+                    // Default solo fecha
+                    return new Date(t.transfer_date).toLocaleDateString("es-ES");
+                  })()}
                 </Text>
               </Flex>
               <Flex justify="space-between">

@@ -91,12 +91,12 @@ function removePlayerFromTeam(participant_id, player_id, cb) {
 
 // Actualizar lock de cláusula
 function updateClauseLock(participant_id, player_id, clause_lock_until, cb) {
+  console.log(`[DEBUG][MODEL] updateClauseLock: participant_id=${participant_id}, player_id=${player_id}, clause_lock_until=${clause_lock_until}`);
   db.run(
-    `UPDATE participant_players 
-     SET clause_lock_until = ? 
-     WHERE participant_id = ? AND player_id = ?`,
+    `UPDATE participant_players \n     SET clause_lock_until = ? \n     WHERE participant_id = ? AND player_id = ?`,
     [clause_lock_until, participant_id, player_id],
     function (err) {
+      console.log(`[DEBUG][MODEL] updateClauseLock result: err=`, err, 'changes=', this.changes);
       if (typeof cb === 'function') {
         if (err) return cb(err);
         cb(null, { changes: this.changes });
@@ -107,10 +107,12 @@ function updateClauseLock(participant_id, player_id, clause_lock_until, cb) {
 
 // Actualizar valor de cláusula
 function updateClauseValue(participant_id, player_id, clause_value, cb) {
+  console.log(`[DEBUG][MODEL] updateClauseValue: participant_id=${participant_id}, player_id=${player_id}, clause_value=${clause_value}`);
   db.run(
     `UPDATE participant_players SET clause_value = ? WHERE participant_id = ? AND player_id = ?`,
     [clause_value, participant_id, player_id],
     function(err) {
+      console.log(`[DEBUG][MODEL] updateClauseValue result: err=`, err, 'changes=', this.changes);
       if (typeof cb === 'function') cb(err, { changes: this.changes });
     }
   );
@@ -118,10 +120,12 @@ function updateClauseValue(participant_id, player_id, clause_value, cb) {
 
 // Actualizar clausulabilidad
 function updateClausulable(participant_id, player_id, is_clausulable, cb) {
+  console.log(`[DEBUG][MODEL] updateClausulable: participant_id=${participant_id}, player_id=${player_id}, is_clausulable=${is_clausulable}`);
   db.run(
-    `UPDATE participant_players SET is_clausulable = ? WHERE participant_id = ? AND player_id = ?`,
+    `UPDATE participant_players SET is_clausulable = ? WHERE participant_id = ? AND player_id = ?` ,
     [is_clausulable, participant_id, player_id],
     function(err) {
+      console.log(`[DEBUG][MODEL] updateClausulable result: err=`, err, 'changes=', this.changes);
       if (typeof cb === 'function') cb(err, { changes: this.changes });
     }
   );

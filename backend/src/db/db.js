@@ -16,6 +16,8 @@ const db = new sqlite3.Database(
     }
   }
 );
+// Añadir timeout para evitar SQLITE_BUSY
+db.run('PRAGMA busy_timeout = 5000;'); // Espera hasta 5 segundos si la base está bloqueada
 
 db.serialize(() => {
   // Tabla mínima de equipos

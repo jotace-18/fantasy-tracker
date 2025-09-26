@@ -1,3 +1,18 @@
+// Sumar dinero al participante (sin sobrescribir)
+function addMoneyToParticipant(id, amount, cb) {
+  db.run(
+    `UPDATE participants SET money = money + ? WHERE id = ?`,
+    [amount, id],
+    function (err) {
+      if (err) {
+        console.error("❌ [Model] Error sumando dinero:", err.message);
+        return cb(err);
+      }
+      console.log(`✅ [Model] Participante ${id} suma ${amount} dinero`);
+      cb(null, { id, amount });
+    }
+  );
+}
 // Obtener dinero de un participante por id
 function getParticipantMoney(id, cb) {
   db.get(`SELECT money FROM participants WHERE id = ?`, [id], (err, row) => {
@@ -164,7 +179,8 @@ module.exports = {
   updateParticipantPoints,
   deleteParticipant,
   getLeaderboard,
-  getParticipantById
-  ,getParticipantMoney
-  ,updateParticipantMoney
+  getParticipantById,
+  getParticipantMoney,
+  updateParticipantMoney,
+  addMoneyToParticipant
 };

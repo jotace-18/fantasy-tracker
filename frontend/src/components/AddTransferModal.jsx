@@ -19,9 +19,6 @@ export default function AddTransferModal({ isOpen, onClose, onTransferAdded }) {
   const [date, setDate] = useState("");
   const [time, setTime] = useState("");
 
-  // ⚡ IDs propios
-  const myParticipantId = "8"; // tu participante (JC)
-  const myUserTeamId = "1"; // tu user_team
 
   // Set default date/time on open
   useEffect(() => {
@@ -55,17 +52,11 @@ export default function AddTransferModal({ isOpen, onClose, onTransferAdded }) {
       } else if (!toParticipant) {
         return setAvailablePlayers([]);
       } else {
-        fetchUrl =
-          toParticipant === myParticipantId
-            ? `/api/user-players/${myUserTeamId}`
-            : `/api/participant-players/${toParticipant}/team`;
+        fetchUrl = `/api/participant-players/${toParticipant}/team`;
       }
     } else if (action === "sell") {
       if (!fromParticipant) return setAvailablePlayers([]);
-      fetchUrl =
-        fromParticipant === myParticipantId
-          ? `/api/user-players/${myUserTeamId}`
-          : `/api/participant-players/${fromParticipant}/team`;
+      fetchUrl = `/api/participant-players/${fromParticipant}/team`;
     }
 
     if (fetchUrl) {
@@ -127,7 +118,8 @@ export default function AddTransferModal({ isOpen, onClose, onTransferAdded }) {
       return;
     }
 
-    if (player.market_value_num && Number(amount) < player.market_value_num) {
+    // Solo impedir precio menor a mercado en compra y cláusula, no en venta
+    if ((action === "buy" || action === "clause") && player.market_value_num && Number(amount) < player.market_value_num) {
       toast({
         title: "Error",
         description: "El precio no puede ser menor al valor de mercado",
