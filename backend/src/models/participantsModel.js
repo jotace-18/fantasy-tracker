@@ -173,6 +173,21 @@ function getLeaderboard(cb) {
   });
 }
 
+function updateParticipantFormation(id, formation, cb) {
+  db.run(
+    `UPDATE participants SET formation = ? WHERE id = ?`,
+    [formation, id],
+    function (err) {
+      if (err) {
+        console.error("❌ [Model] Error actualizando formación:", err.message);
+        return cb(err);
+      }
+      console.log(`✅ [Model] Participante ${id} actualizado a formación ${formation}`);
+      cb(null, { id, formation });
+    }
+  );
+}
+
 module.exports = {
   createParticipant,
   getAllParticipants,
@@ -182,5 +197,6 @@ module.exports = {
   getParticipantById,
   getParticipantMoney,
   updateParticipantMoney,
-  addMoneyToParticipant
+  addMoneyToParticipant,
+  updateParticipantFormation
 };

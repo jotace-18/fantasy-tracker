@@ -54,6 +54,23 @@ function getById(req, res) {
     res.json(participant);
   });
 }
+// PUT /api/participants/:id/formation
+function updateFormation(req, res) {
+  const { id } = req.params;
+  const { formation } = req.body;
+  if (!formation) {
+    return res.status(400).json({ error: 'formation requerido' });
+  }
+  participantsService.editParticipantFormation(id, formation, (err, result) => {
+    if (err) {
+      console.error(`[Controller] Error en updateFormation:`, err.message);
+      return res.status(400).json({ error: err.message });
+    }
+    res.json(result);
+  });
+}
+
+// ...existing code...
 // POST /api/participants
 function add(req, res) {
   participantsService.addParticipant(req.body, (err, result) => {
@@ -111,4 +128,4 @@ function getLeaderboard(req, res) {
   });
 }
 
-module.exports = { add, list, updatePoints, remove, getLeaderboard, getById, getMoney, updateMoney, addMoney };
+module.exports = { add, list, updatePoints, remove, getLeaderboard, getById, getMoney, updateMoney, addMoney, updateFormation };

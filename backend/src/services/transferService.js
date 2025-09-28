@@ -99,6 +99,23 @@ function create(transfer, cb) {
 
           console.log("📑 Transfer guardado en tabla transfers:", result);
 
+          // Si es traspaso por cláusula, actualizar el valor de la cláusula al nuevo precio
+          const updateClauseIfNeeded = (done) => {
+            if (type === "clause" && buyerId) {
+              const sqlClause = `UPDATE participant_players SET clause_value = ? WHERE participant_id = ? AND player_id = ?`;
+              db.run(sqlClause, [amount, buyerId, player_id], function (errClause) {
+                if (errClause) {
+                  console.error("❌ Error actualizando valor de cláusula:", errClause.message);
+                  return done(errClause);
+                }
+                console.log(`💶 Valor de cláusula actualizado a ${amount}`);
+                done();
+              });
+            } else {
+              done();
+            }
+          };
+
           // 🔒 Tras cualquier traspaso, bloquear cláusula 14 días y desactivar clausulable
           if (buyerId) {
             const sql = `
@@ -113,10 +130,16 @@ function create(transfer, cb) {
                 return cb(err5);
               }
               console.log(`🔒 Jugador ${player_id} bloqueado hasta +14 días`);
-              cb(null, result);
+              updateClauseIfNeeded((errClause) => {
+                if (errClause) return cb(errClause);
+                cb(null, result);
+              });
             });
           } else {
-            cb(null, result);
+            updateClauseIfNeeded((errClause) => {
+              if (errClause) return cb(errClause);
+              cb(null, result);
+            });
           }
         });
       });

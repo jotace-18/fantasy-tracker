@@ -11,7 +11,11 @@ export default function useLeaderboardPosition(participantId) {
       .then((res) => res.json())
       .then((data) => {
         if (ignore) return;
-        const idx = data.findIndex((p) => String(p.id) === String(participantId));
+        // Ordenar igual que en LeaderboardPage (por puntos totales descendente)
+        const sorted = [...data].sort((a, b) => (b.total_points || 0) - (a.total_points || 0));
+        const ids = sorted.map((p) => p.id);
+        console.log('[DEBUG][useLeaderboardPosition] participantId:', participantId, 'Sorted Leaderboard ids:', ids);
+        const idx = sorted.findIndex((p) => String(p.id) === String(participantId));
         setPosition(idx >= 0 ? idx + 1 : null);
         setLoading(false);
       })

@@ -1,34 +1,32 @@
+const participantsModel = require("../models/participantsModel");
+
 function addMoneyToParticipant(id, amount, cb) {
   participantsModel.addMoneyToParticipant(id, amount, cb);
 }
 function getParticipantMoney(id, cb) {
   participantsModel.getParticipantMoney(id, cb);
 }
-
 function editParticipantMoney(id, money, cb) {
   participantsModel.updateParticipantMoney(id, money, cb);
 }
 function getParticipantById(id, cb) {
   participantsModel.getParticipantById(id, cb);
 }
-const participantsModel = require("../models/participantsModel");
-
 function addParticipant(data, cb) {
   participantsModel.createParticipant(data, cb);
 }
-
 function listParticipants(cb) {
   participantsModel.getAllParticipants(cb);
 }
-
+function editParticipantFormation(id, formation, cb) {
+  participantsModel.updateParticipantFormation(id, formation, cb);
+}
 function editParticipantPoints(id, total_points, cb) {
   participantsModel.updateParticipantPoints(id, total_points, cb);
 }
-
 function removeParticipant(id, cb) {
   participantsModel.deleteParticipant(id, cb);
 }
-
 function fetchLeaderboard(cb) {
   participantsModel.getLeaderboard(cb);
 }
@@ -42,5 +40,6 @@ module.exports = {
   getParticipantById,
   getParticipantMoney,
   editParticipantMoney,
-  addMoneyToParticipant
+  addMoneyToParticipant,
+  editParticipantFormation
 };

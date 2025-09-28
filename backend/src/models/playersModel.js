@@ -52,7 +52,7 @@ const findTopPlayersPaginated = (page = 1, limit = 20, sortBy = "total_points", 
         orderExpr = "total_points";
     }
 
-    // Query con CTE + JOIN para obtener propietario (usuario o participante)
+    // Query con CTE + JOIN para obtener propietario (solo participant_owners)
     const query = `
       WITH ranked AS (
         SELECT
@@ -68,17 +68,11 @@ const findTopPlayersPaginated = (page = 1, limit = 20, sortBy = "total_points", 
         LEFT JOIN player_points pp ON p.id = pp.player_id
         GROUP BY p.id
       ),
-      user_owners AS (
-        SELECT up.player_id, 'user' AS owner_type, NULL AS participant_id, up.user_team_id AS owner_id
-        FROM user_players up
-      ),
       participant_owners AS (
         SELECT pp.player_id, 'participant' AS owner_type, pp.participant_id, NULL AS owner_id
         FROM participant_players pp
       ),
       all_owners AS (
-        SELECT * FROM user_owners
-        UNION ALL
         SELECT * FROM participant_owners
       ),
       owners_with_name AS (

@@ -17,6 +17,8 @@ router.delete("/:id", participantsController.remove);
 router.get('/:id/money', participantsController.getMoney);
 router.put('/:id/money', participantsController.updateMoney);
 router.post('/:id/add-money', participantsController.addMoney);
+// Actualizar formación
+router.put('/:id/formation', participantsController.updateFormation);
 
 
 module.exports = router;

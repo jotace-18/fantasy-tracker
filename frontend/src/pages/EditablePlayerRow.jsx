@@ -33,8 +33,7 @@ export default function EditablePlayerRow({ player, participantId, onChange, row
   });
   // Eliminados edit y setClause (no usados)
   const [removing, setRemoving] = useState(false);
-  const [days, setDays] = useState(0);
-  const [hours, setHours] = useState(0);
+  // const [hours, setHours] = useState(0);
 
   // ⏳ calcular tiempo restante de cláusula
   const clauseTimeLeft = useMemo(() => {
@@ -56,9 +55,8 @@ export default function EditablePlayerRow({ player, participantId, onChange, row
   // });
 
   // inicializar inputs al entrar en modo edición
+  // inicializar inputs al entrar en modo edición
   const handleEdit = () => {
-    setDays(clauseTimeLeft.days);
-    setHours(clauseTimeLeft.hours);
     setClauseForm({
       clause_value: player.clause_value ?? player.market_value ?? 0,
       is_clausulable: !!player.is_clausulable,
@@ -67,7 +65,6 @@ export default function EditablePlayerRow({ player, participantId, onChange, row
     });
     setClauseModalOpen(true);
   };
-
   // Eliminada función handleSave y referencias a setSaving y clausulable
 
   const handleRemove = async () => {

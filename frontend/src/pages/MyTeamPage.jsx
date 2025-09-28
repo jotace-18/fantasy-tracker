@@ -11,6 +11,13 @@ import {
   useDisclosure,
   Spinner,
   Tooltip,
+  Modal,
+  ModalOverlay,
+  ModalContent,
+  ModalHeader,
+  ModalFooter,
+  ModalBody,
+  ModalCloseButton,
 } from "@chakra-ui/react";
 import ClauseLockModal from "../components/ClauseLockModal";
 import { FORMATIONS, FORMATION_MAP } from "../utils/formations";
@@ -185,9 +192,11 @@ function msToHMS(ms) {
       const teamId = myParticipantId;
       if (!selectedSlot) return;
 
-      // Si había jugador en el slot → mandarlo a reserva
+      // Buscar si ya hay jugador en el slot (XI o banquillo)
       const prevPlayer = myPlayers.find(
-        (pl) => pl.slot_index === selectedSlot.index && pl.status === (selectedSlot.isBench ? "B" : "XI")
+        (pl) =>
+          pl.slot_index === selectedSlot.index &&
+          pl.status === (selectedSlot.isBench ? "B" : "XI")
       );
       if (prevPlayer) {
         await fetch(`/api/participant-players/${teamId}/team/${prevPlayer.player_id}`, {
@@ -197,11 +206,14 @@ function msToHMS(ms) {
         });
       }
 
-      // Nuevo jugador al XI o banquillo en slot
+      // Asignar jugador al slot correcto (XI o banquillo con su slot_index)
       await fetch(`/api/participant-players/${teamId}/team/${player.player_id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: selectedSlot.isBench ? "B" : "XI", slot_index: selectedSlot.index }),
+        body: JSON.stringify({
+          status: selectedSlot.isBench ? "B" : "XI",
+          slot_index: selectedSlot.index,
+        }),
       });
 
       await fetchTeamAndPlayers();
@@ -454,8 +466,9 @@ function msToHMS(ms) {
               <Text fontWeight="bold" fontSize="md" color="orange.600" mb={1}>Banquillo</Text>
               <HStack justify="flex-start" spacing={4}>
                 {Array.from({ length: 4 }).map((_, i) => {
-                  const benchPlayers = myPlayers.filter((pl) => pl.status === "B");
-                  const playerForBench = benchPlayers[i] || null;
+                  const playerForBench = myPlayers.find(
+                    (pl) => pl.status === "B" && pl.slot_index === i + 1
+                  ) || null;
                   return (
                     <PlayerSlot
                       key={i}

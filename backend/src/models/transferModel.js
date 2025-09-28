@@ -30,20 +30,46 @@ function getAll(cb) {
 
 // Crear transferencia
 function create(transfer, cb) {
-  const sql = `
-    INSERT INTO transfers (
-      player_id, from_participant_id, to_participant_id, 
-      type, amount, clause_value, transfer_date
-    ) VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
-  `;
-  const params = [
-    transfer.player_id,
-    transfer.from_participant_id || null,
-    transfer.to_participant_id || null,
-    transfer.type,
-    transfer.amount,
-    transfer.clause_value || null
-  ];
+  let sql, params;
+  // Si es clausulazo y se recibe date+time, usar esa fecha/hora
+  if (
+    transfer.type === 'clause' &&
+    transfer.date && transfer.time &&
+    /^\d{4}-\d{2}-\d{2}$/.test(transfer.date) &&
+    /^\d{2}:\d{2}$/.test(transfer.time)
+  ) {
+    sql = `
+      INSERT INTO transfers (
+        player_id, from_participant_id, to_participant_id, 
+        type, amount, clause_value, transfer_date
+      ) VALUES (?, ?, ?, ?, ?, ?, datetime(? || ' ' || ?))
+    `;
+    params = [
+      transfer.player_id,
+      transfer.from_participant_id || null,
+      transfer.to_participant_id || null,
+      transfer.type,
+      transfer.amount,
+      transfer.clause_value || null,
+      transfer.date,
+      transfer.time
+    ];
+  } else {
+    sql = `
+      INSERT INTO transfers (
+        player_id, from_participant_id, to_participant_id, 
+        type, amount, clause_value, transfer_date
+      ) VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
+    `;
+    params = [
+      transfer.player_id,
+      transfer.from_participant_id || null,
+      transfer.to_participant_id || null,
+      transfer.type,
+      transfer.amount,
+      transfer.clause_value || null
+    ];
+  }
 
   db.run(sql, params, function (err) {
     if (err) return cb(err);

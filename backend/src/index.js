@@ -13,12 +13,6 @@ const participantPlayersRoutes = require("./routes/participantPlayersRoutes");
 const scraperMetadataRoutes = require("./routes/scraperMetadataRoutes");
 const transfersRoutes = require("./routes/transferRoutes");
 
-
-// 🔥 Nuevas rutas fragmentadas para el usuario
-const userTeamsRoutes = require("./routes/userTeamsRoutes");
-const userPlayersRoutes = require("./routes/userPlayersRoutes");
-const userPointsRoutes = require("./routes/userPointsRoutes");
-
 // Reloj interno
 const clockRoutes = require("./routes/clockRoutes");
 
@@ -46,10 +40,6 @@ app.use("/api/participants", participantsRoutes);
 app.use("/api/participant-points", participantPointsRoutes);
 app.use("/api/participant-players", participantPlayersRoutes);
 
-// --- Sustitución de userRoutes por fragmentados ---
-app.use("/api/user-teams", userTeamsRoutes);
-app.use("/api/user-players", userPlayersRoutes);
-app.use("/api/user-points", userPointsRoutes);
 // Endpoint del reloj interno
 app.use("/api/clock", clockRoutes);
 

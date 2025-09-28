@@ -70,11 +70,12 @@ export default function ParticipantProfilePage() {
   const handleAddPlayer = async (player) => {
     setAdding(true);
     try {
-      // Por defecto: no clausulable y cláusula igual a valor de mercado
+      // Igualar body al de MyTeamPage
       const body = {
         player_id: player.id,
-        is_clausulable: false,
-        clause_value: player.market_value_num || 0
+        buy_price: player.market_value_num || 0,
+        status: "R",
+        slot_index: null
       };
       const res = await fetch(`/api/participant-players/${id}/team`, {
         method: "POST",
@@ -92,6 +93,7 @@ export default function ParticipantProfilePage() {
   };
 
   const { position, loading: loadingPosition } = useLeaderboardPosition(id);
+  // (debug eliminado)
 
   // Ordenar plantilla localmente
   const getSortedSquad = () => {
@@ -187,7 +189,11 @@ export default function ParticipantProfilePage() {
               </Button>
             </Flex>
             <Badge colorScheme="gray" fontSize="2xl" px={5} py={2} borderRadius="lg" boxShadow="md">
-              {loadingPosition ? "Cargando posición..." : position ? `Posición: ${position}` : "Sin ranking"}
+              {loadingPosition
+                ? "Cargando posición..."
+                : position !== null && position !== undefined
+                  ? `Posición: ${position}`
+                  : "Sin ranking"}
             </Badge>
             <Badge colorScheme="purple" fontSize="2xl" px={5} py={2} borderRadius="lg" boxShadow="md">
               Valor plantilla: {plantillaValue.toLocaleString("es-ES")} €
