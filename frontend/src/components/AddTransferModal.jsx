@@ -84,7 +84,9 @@ export default function AddTransferModal({ isOpen, onClose, onTransferAdded }) {
   // Autocompletar precio
   const handleSelectPlayer = (p) => {
     setPlayer(p);
-    if (p.market_value_num) {
+    if (action === "clause" && p.clause_value) {
+      setAmount(p.clause_value);
+    } else if (p.market_value_num) {
       setAmount(p.market_value_num);
     }
   };

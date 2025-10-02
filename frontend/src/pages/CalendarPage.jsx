@@ -1,5 +1,9 @@
 
-import { useEffect, useState } from "react";
+
+import React, { useEffect, useState } from "react";
+import { IconButton } from "@chakra-ui/react";
+import { EditIcon } from "@chakra-ui/icons";
+import EditJornadaModal from "../components/EditJornadaModal";
 import {
   Box,
   Heading,
@@ -15,67 +19,71 @@ import {
 } from "@chakra-ui/react";
 import { Link } from "react-router-dom";
 
-
 export default function CalendarPage() {
+  // Ref para cada jornada
+  const jornadaRefs = [];
+
   const [jornadas, setJornadas] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [teamMap, setTeamMap] = useState({});
+  const [teams, setTeams] = useState([]);
+  const [teamById, setTeamById] = useState({});
+  const [editJornada, setEditJornada] = useState(null);
 
-  // Normalizador de nombres de equipo
-  const normalize = (str) => str
-    .toLowerCase()
-    .replace(/\bfc |cf |ud |cd |rcd |ca |deportivo |real |athletic |club |\bthe |\bof |\bde |\bla |\bce |\bcd |\bsa |\bsv |\bsc |\bafc |\bcalcio |\bclub |\bfoot ?ball|\bteam|\buni[oó]n|[\s-]+/g, "")
-    .replace(/[^a-záéíóúüñ]/g, "");
-
-  // Alias manuales para casos especiales
-  const TEAM_ALIASES = {
-    "athletic club": "Athletic Club",
-    "athletic": "Athletic Club",
-    "athletic bilbao": "Athletic Club",
-    "celta": "Celta",
-    "celta de vigo": "Celta",
-    "rc celta": "Celta",
-    "rcd espanyol": "RCD Espanyol de Barcelona",
-    "espanyol": "RCD Espanyol de Barcelona",
-  };
-
-  useEffect(() => {
-    // Fetch equipos y jornadas en paralelo
+  const fetchJornadas = () => {
+    setLoading(true);
     Promise.all([
       fetch("http://localhost:4000/api/teams").then(res => res.json()),
       fetch("http://localhost:4000/api/calendar/next?limit=38").then(res => res.json())
-    ]).then(([teams, data]) => {
-      // Mapeo flexible: nombre, short_name, slug, y normalización básica
-      const map = {};
-      teams.forEach(t => {
-        map[t.name] = t.id;
-        if (t.short_name) map[t.short_name] = t.id;
-        if (t.slug) map[t.slug] = t.id;
-        map[normalize(t.name)] = t.id;
-        if (t.name.includes("CF ")) map[t.name.replace("CF ", "")] = t.id;
-        if (t.name.includes("FC ")) map[t.name.replace("FC ", "")] = t.id;
-        if (t.name.includes("UD ")) map[t.name.replace("UD ", "")] = t.id;
-      });
-      // Alias manuales
-      Object.entries(TEAM_ALIASES).forEach(([alias, realName]) => {
-        if (map[realName]) map[alias] = map[realName];
-      });
-      setTeamMap(map);
-      // Filtrar jornadas que ya han pasado (fecha_cierre < ahora, si tiene fecha)
-      const now = new Date();
-      const futuras = data.filter(j => {
-        if (!j.fecha_cierre) return true;
-        return new Date(j.fecha_cierre) > now;
-      });
-      setJornadas(futuras);
+    ]).then(([teamsData, data]) => {
+      setTeams(teamsData);
+      const byId = {};
+      teamsData.forEach(t => { byId[t.id] = t; });
+      setTeamById(byId);
+      setJornadas(data);
       setLoading(false);
     });
+  };
+
+  useEffect(() => {
+    fetchJornadas();
   }, []);
+
+  // Scroll automático a la jornada actual cuando se cargan jornadas
+  useEffect(() => {
+    if (actualIdx !== -1 && jornadaRefs[actualIdx] && jornadaRefs[actualIdx].scrollIntoView) {
+      jornadaRefs[actualIdx].scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+    // eslint-disable-next-line
+  }, [loading, jornadas.length]);
 
   // Colores para tarjetas y equipos
   const cardBorder = useColorModeValue("blue.200", "blue.700");
   const equipoColor = useColorModeValue("teal.700", "teal.200");
   const equipoHover = useColorModeValue("teal.500", "teal.300");
+
+  // Devuelve el nombre o alias del equipo por id
+  const getTeamName = (id) => {
+    const t = teamById[id];
+    if (!t) return id;
+    return t.alias || t.name || id;
+  };
+
+  // Determinar la jornada "actual": la primera que aún no ha cerrado (fecha_cierre > ahora)
+  let actualIdx = -1;
+  const now = new Date();
+  if (jornadas.length > 0) {
+    for (let i = 0; i < jornadas.length; i++) {
+      const cierre = jornadas[i].fecha_cierre ? new Date(jornadas[i].fecha_cierre) : null;
+      if (cierre && cierre > now) {
+        actualIdx = i;
+        break;
+      }
+    }
+    if (actualIdx === -1 && jornadas[jornadas.length - 1]?.fecha_cierre) {
+      // Si todas están cerradas, marcar la última
+      actualIdx = jornadas.length - 1;
+    }
+  }
 
   return (
     <Box maxW="1200px" mx="auto" mt={8} p={6} bg="white" borderRadius="lg" boxShadow="2xl">
@@ -84,89 +92,123 @@ export default function CalendarPage() {
         <Spinner size="xl" color="blue.500" />
       ) : (
         <SimpleGrid columns={[1, 2, 3]} spacing={8}>
-          {jornadas.map((jornada) => (
-            <Box
-              key={jornada.id}
-              p={5}
-              borderRadius="xl"
-              bgGradient="linear(to-br, blue.100, blue.50)"
-              borderWidth={2}
-              borderColor={cardBorder}
-              boxShadow="lg"
-              _hover={{ boxShadow: "2xl", transform: "scale(1.025)" }}
-              transition="all 0.2s"
-            >
-              <VStack align="stretch" spacing={3}>
-                <HStack justify="space-between">
-                  <Text fontWeight="bold" fontSize="xl" color="blue.800" letterSpacing={1}>
-                    Jornada {jornada.numero}
-                  </Text>
-                  {jornada.fecha_cierre ? (
-                    <Badge colorScheme="blue" fontSize="sm" px={3} py={1} borderRadius="md">
-                      Cierra: {new Date(jornada.fecha_cierre).toLocaleString("es-ES", { dateStyle: "short", timeStyle: "short" })}
-                    </Badge>
-                  ) : (
-                    <Badge colorScheme="yellow" fontSize="sm" px={3} py={1} borderRadius="md">Cierre desconocido</Badge>
-                  )}
-                </HStack>
-                <Divider borderColor={cardBorder} />
-                {jornada.enfrentamientos && jornada.enfrentamientos.length > 0 ? (
-                  jornada.enfrentamientos.map((e, idx) => (
-                    <HStack key={e.id || idx} justify="space-between" px={2}>
-                      <ChakraLink
-                        as={Link}
-                        to={(() => {
-                          const n = e.equipo_local;
-                          const alias = TEAM_ALIASES[n.toLowerCase()?.trim()];
-                          return teamMap[n] || teamMap[n.trim()] || teamMap[n.replace(' de ', ' ')] || teamMap[n.replace('CF ', '')] || teamMap[n.replace('FC ', '')] || teamMap[n.replace('UD ', '')] || teamMap[n.replace('CD ', '')] || teamMap[n.replace('RC ', '')] || teamMap[n.replace('RCD ', '')] || teamMap[n.replace('CA ', '')] || teamMap[n.replace(' ', '')] || teamMap[n.toLowerCase()] || teamMap[n.toUpperCase()] || teamMap[n.replace(/ /g, '')] || teamMap[n.replace(/\s+/, '')] || teamMap[normalize(n)] || (alias && teamMap[alias]) ? `/teams/${teamMap[n] || teamMap[n.trim()] || teamMap[n.replace(' de ', ' ')] || teamMap[n.replace('CF ', '')] || teamMap[n.replace('FC ', '')] || teamMap[n.replace('UD ', '')] || teamMap[n.replace('CD ', '')] || teamMap[n.replace('RC ', '')] || teamMap[n.replace('RCD ', '')] || teamMap[n.replace('CA ', '')] || teamMap[n.replace(' ', '')] || teamMap[n.toLowerCase()] || teamMap[n.toUpperCase()] || teamMap[n.replace(/ /g, '')] || teamMap[n.replace(/\s+/, '')] || teamMap[normalize(n)] || (alias && teamMap[alias])}` : '#';
-                        })()}
-                        color={equipoColor}
-                        fontWeight="bold"
-                        _hover={{ color: equipoHover, textDecoration: "underline" }}
-                        transition="color 0.15s"
-                        pointerEvents={(() => {
-                          const n = e.equipo_local;
-                          const alias = TEAM_ALIASES[n.toLowerCase()?.trim()];
-                          return (teamMap[n] || teamMap[n.trim()] || teamMap[n.replace(' de ', ' ')] || teamMap[n.replace('CF ', '')] || teamMap[n.replace('FC ', '')] || teamMap[n.replace('UD ', '')] || teamMap[n.replace('CD ', '')] || teamMap[n.replace('RC ', '')] || teamMap[n.replace('RCD ', '')] || teamMap[n.replace('CA ', '')] || teamMap[n.replace(' ', '')] || teamMap[n.toLowerCase()] || teamMap[n.toUpperCase()] || teamMap[n.replace(/ /g, '')] || teamMap[n.replace(/\s+/, '')] || teamMap[normalize(n)] || (alias && teamMap[alias])) ? 'auto' : 'none';
-                        })()}
-                        opacity={(() => {
-                          const n = e.equipo_local;
-                          const alias = TEAM_ALIASES[n.toLowerCase()?.trim()];
-                          return (teamMap[n] || teamMap[n.trim()] || teamMap[n.replace(' de ', ' ')] || teamMap[n.replace('CF ', '')] || teamMap[n.replace('FC ', '')] || teamMap[n.replace('UD ', '')] || teamMap[n.replace('CD ', '')] || teamMap[n.replace('RC ', '')] || teamMap[n.replace('RCD ', '')] || teamMap[n.replace('CA ', '')] || teamMap[n.replace(' ', '')] || teamMap[n.toLowerCase()] || teamMap[n.toUpperCase()] || teamMap[n.replace(/ /g, '')] || teamMap[n.replace(/\s+/, '')] || teamMap[normalize(n)] || (alias && teamMap[alias])) ? 1 : 0.5;
-                        })()}
-                      >
-                        {e.equipo_local}
-                      </ChakraLink>
-                      <Text color="gray.500" fontWeight="bold">vs</Text>
-                      <ChakraLink
-                        as={Link}
-                        to={(() => {
-                          const n = e.equipo_visitante;
-                          return teamMap[n] || teamMap[n.trim()] || teamMap[n.replace(' de ', ' ')] || teamMap[n.replace('CF ', '')] || teamMap[n.replace('FC ', '')] || teamMap[n.replace('UD ', '')] || teamMap[n.replace('CD ', '')] || teamMap[n.replace('RC ', '')] || teamMap[n.replace('RCD ', '')] || teamMap[n.replace('CA ', '')] || teamMap[n.replace(' ', '')] || teamMap[n.toLowerCase()] || teamMap[n.toUpperCase()] || teamMap[n.replace(/ /g, '')] || teamMap[n.replace(/\s+/, '')] || teamMap[normalize(n)] ? `/teams/${teamMap[n] || teamMap[n.trim()] || teamMap[n.replace(' de ', ' ')] || teamMap[n.replace('CF ', '')] || teamMap[n.replace('FC ', '')] || teamMap[n.replace('UD ', '')] || teamMap[n.replace('CD ', '')] || teamMap[n.replace('RC ', '')] || teamMap[n.replace('RCD ', '')] || teamMap[n.replace('CA ', '')] || teamMap[n.replace(' ', '')] || teamMap[n.toLowerCase()] || teamMap[n.toUpperCase()] || teamMap[n.replace(/ /g, '')] || teamMap[n.replace(/\s+/, '')] || teamMap[normalize(n)]}` : '#';
-                        })()}
-                        color={equipoColor}
-                        fontWeight="bold"
-                        _hover={{ color: equipoHover, textDecoration: "underline" }}
-                        transition="color 0.15s"
-                        pointerEvents={(() => {
-                          const n = e.equipo_visitante;
-                          return (teamMap[n] || teamMap[n.trim()] || teamMap[n.replace(' de ', ' ')] || teamMap[n.replace('CF ', '')] || teamMap[n.replace('FC ', '')] || teamMap[n.replace('UD ', '')] || teamMap[n.replace('CD ', '')] || teamMap[n.replace('RC ', '')] || teamMap[n.replace('RCD ', '')] || teamMap[n.replace('CA ', '')] || teamMap[n.replace(' ', '')] || teamMap[n.toLowerCase()] || teamMap[n.toUpperCase()] || teamMap[n.replace(/ /g, '')] || teamMap[n.replace(/\s+/, '')] || teamMap[normalize(n)]) ? 'auto' : 'none';
-                        })()}
-                        opacity={(() => {
-                          const n = e.equipo_visitante;
-                          return (teamMap[n] || teamMap[n.trim()] || teamMap[n.replace(' de ', ' ')] || teamMap[n.replace('CF ', '')] || teamMap[n.replace('FC ', '')] || teamMap[n.replace('UD ', '')] || teamMap[n.replace('CD ', '')] || teamMap[n.replace('RC ', '')] || teamMap[n.replace('RCD ', '')] || teamMap[n.replace('CA ', '')] || teamMap[n.replace(' ', '')] || teamMap[n.toLowerCase()] || teamMap[n.toUpperCase()] || teamMap[n.replace(/ /g, '')] || teamMap[n.replace(/\s+/, '')] || teamMap[normalize(n)]) ? 1 : 0.5;
-                        })()}
-                      >
-                        {e.equipo_visitante}
-                      </ChakraLink>
+          {jornadas.map((jornada, idx) => {
+            // Asignar ref a cada jornada
+            jornadaRefs[idx] = jornadaRefs[idx] || React.createRef();
+            // Color para la jornada actual
+            const isActual = idx === actualIdx;
+            const bgGradient = isActual
+              ? "linear(to-br, green.100, green.50)"
+              : "linear(to-br, blue.100, blue.50)";
+            const badgeColor = isActual ? "green" : "blue";
+            return (
+              <Box
+                key={jornada.id}
+                ref={el => (jornadaRefs[idx] = el)}
+                p={5}
+                borderRadius="xl"
+                bgGradient={bgGradient}
+                borderWidth={2}
+                borderColor={cardBorder}
+                boxShadow="lg"
+                _hover={{ boxShadow: "2xl", transform: "scale(1.025)" }}
+                transition="all 0.2s"
+              >
+                <VStack align="stretch" spacing={3}>
+                  <HStack justify="space-between">
+                    <HStack>
+                      <Text fontWeight="bold" fontSize="xl" color={isActual ? "green.800" : "blue.800"} letterSpacing={1}>
+                        Jornada {jornada.numero}
+                      </Text>
+                      <IconButton
+                        aria-label="Editar jornada"
+                        icon={<EditIcon boxSize={5} />}
+                        size="md"
+                        colorScheme={badgeColor}
+                        variant="solid"
+                        ml={2}
+                        title="Editar jornada y resultados"
+                        _hover={{ bg: isActual ? "green.400" : "blue.400", color: "white" }}
+                        onClick={() => setEditJornada(jornada)}
+                      />
                     </HStack>
-                  ))
-                ) : (
-                  <Text color="gray.400">Sin enfrentamientos</Text>
-                )}
-              </VStack>
-            </Box>
-          ))}
+                    {jornada.fecha_cierre ? (
+                      <Badge colorScheme={badgeColor} fontSize="sm" px={3} py={1} borderRadius="md">
+                        Cierra: {new Date(jornada.fecha_cierre).toLocaleString("es-ES", { dateStyle: "short", timeStyle: "short" })}
+                      </Badge>
+                    ) : (
+                      <Badge colorScheme="yellow" fontSize="sm" px={3} py={1} borderRadius="md">Cierre desconocido</Badge>
+                    )}
+                  </HStack>
+      {/* Modal de edición de jornada */}
+      <EditJornadaModal
+        isOpen={!!editJornada}
+        onClose={() => setEditJornada(null)}
+        jornada={editJornada}
+        onSaved={fetchJornadas}
+        teams={teams}
+      />
+                  <Divider borderColor={cardBorder} />
+                  {jornada.enfrentamientos && jornada.enfrentamientos.length > 0 ? (
+                    jornada.enfrentamientos.map((e, idx) => {
+                      // Determinar ganador (o empate)
+                      let localHighlight = false, visitanteHighlight = false;
+                      if (
+                        e.goles_local !== null && e.goles_local !== undefined &&
+                        e.goles_visitante !== null && e.goles_visitante !== undefined
+                      ) {
+                        if (e.goles_local > e.goles_visitante) localHighlight = true;
+                        else if (e.goles_local < e.goles_visitante) visitanteHighlight = true;
+                      }
+                      return (
+                        <HStack key={e.id || idx} justify="space-between" px={2}>
+                          <ChakraLink
+                            as={Link}
+                            to={teamById[e.equipo_local_id] ? `/teams/${e.equipo_local_id}` : '#'}
+                            color={localHighlight ? "green.700" : equipoColor}
+                            fontWeight={localHighlight ? "extrabold" : "bold"}
+                            bg={localHighlight ? "green.50" : undefined}
+                            px={localHighlight ? 2 : 0}
+                            py={localHighlight ? 1 : 0}
+                            borderRadius={localHighlight ? "md" : undefined}
+                            _hover={{ color: equipoHover, textDecoration: "underline" }}
+                            transition="color 0.15s, background 0.15s"
+                            pointerEvents={teamById[e.equipo_local_id] ? 'auto' : 'none'}
+                            opacity={teamById[e.equipo_local_id] ? 1 : 0.5}
+                          >
+                            {getTeamName(e.equipo_local_id)}
+                          </ChakraLink>
+                          <Text color="gray.700" fontWeight="bold" fontSize="lg" minW="48px" textAlign="center">
+                            {(e.goles_local !== null && e.goles_local !== undefined && e.goles_visitante !== null && e.goles_visitante !== undefined)
+                              ? `${e.goles_local} - ${e.goles_visitante}`
+                              : 'VS'}
+                          </Text>
+                          <ChakraLink
+                            as={Link}
+                            to={teamById[e.equipo_visitante_id] ? `/teams/${e.equipo_visitante_id}` : '#'}
+                            color={visitanteHighlight ? "green.700" : equipoColor}
+                            fontWeight={visitanteHighlight ? "extrabold" : "bold"}
+                            bg={visitanteHighlight ? "green.50" : undefined}
+                            px={visitanteHighlight ? 2 : 0}
+                            py={visitanteHighlight ? 1 : 0}
+                            borderRadius={visitanteHighlight ? "md" : undefined}
+                            _hover={{ color: equipoHover, textDecoration: "underline" }}
+                            transition="color 0.15s, background 0.15s"
+                            pointerEvents={teamById[e.equipo_visitante_id] ? 'auto' : 'none'}
+                            opacity={teamById[e.equipo_visitante_id] ? 1 : 0.5}
+                          >
+                            {getTeamName(e.equipo_visitante_id)}
+                          </ChakraLink>
+                        </HStack>
+                      );
+                    })
+                  ) : (
+                    <Text color="gray.400">Sin enfrentamientos</Text>
+                  )}
+                </VStack>
+              </Box>
+            );
+          })}
         </SimpleGrid>
       )}
     </Box>

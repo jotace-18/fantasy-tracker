@@ -4,7 +4,7 @@ import { useParams } from "react-router-dom";
 import {
   Box, Spinner, Text, Badge, Table, Thead, Tbody, Tr, Th, Td,
   TableContainer, SimpleGrid, Stat, StatLabel, StatNumber, StatHelpText,
-  Card, CardHeader, CardBody, Divider
+  Card, CardHeader, CardBody, Divider, Progress, HStack, Tooltip as CTooltip
 } from "@chakra-ui/react";
 import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ReferenceDot
@@ -93,6 +93,27 @@ function PlayerDetailPage() {
   const mvMax = toInt(player.market.max);
   const mvMin = toInt(player.market.min);
 
+  // Mapear riesgo
+  const mapRisk = (r) => {
+    if (r == null) return { label: "Sin dato", color: "gray", percent: 0 };
+    if (r <= 1) return { label: "Riesgo muy bajo", color: "green", percent: 15 };
+    if (r === 2) return { label: "Riesgo bajo", color: "green", percent: 30 };
+    if (r === 3) return { label: "Riesgo moderado", color: "yellow", percent: 55 };
+    if (r === 4) return { label: "Riesgo alto", color: "orange", percent: 75 };
+    return { label: "Riesgo muy alto", color: "red", percent: 90 };
+  };
+  const riskInfo = mapRisk(player.risk_level);
+
+  const titularPct = player.titular_next_jor != null ? Math.round(player.titular_next_jor * 100) : null;
+
+  const lesionBadge = player.lesionado ? {
+    text: "Lesionado",
+    color: "red"
+  } : {
+    text: "Disponible",
+    color: "green"
+  };
+
   return (
     <Box p={6}>
       {/* Cabecera */}
@@ -104,17 +125,38 @@ function PlayerDetailPage() {
           <Text fontSize="lg" color="gray.600">
             {player.team_name} • {player.position}
           </Text>
-          {player.risk_level != null && (
-            <Badge
-              mt={2}
-              colorScheme={player.risk_level > 2 ? "red" : "green"}
-              px={3}
-              py={1}
-              borderRadius="lg"
-            >
-              Riesgo de lesión: {player.risk_level}
+          <HStack mt={3} spacing={3} wrap="wrap" alignItems="center">
+            <CTooltip label={`Índice: ${player.risk_level ?? '-'} / Categoría derivada.`} hasArrow>
+              <Badge colorScheme={riskInfo.color} px={3} py={1} borderRadius="lg" fontWeight="semibold">
+                {riskInfo.label}
+              </Badge>
+            </CTooltip>
+            <Badge colorScheme={lesionBadge.color} px={3} py={1} borderRadius="lg" fontWeight="bold">
+              {lesionBadge.text}
             </Badge>
-          )}
+            {titularPct != null && (
+              <Badge
+                colorScheme={titularPct >= 80 ? "green" : titularPct >= 50 ? "yellow" : "red"}
+                px={3}
+                py={1}
+                borderRadius="lg"
+                fontWeight="bold"
+              >
+                Titular J próxima: {titularPct}%
+              </Badge>
+            )}
+          </HStack>
+          <Box mt={4} maxW="380px">
+            <Text fontSize="sm" mb={1} color="gray.600">Riesgo de lesión</Text>
+            <Progress
+              value={riskInfo.percent}
+              size="sm"
+              colorScheme={riskInfo.color}
+              borderRadius="md"
+              hasStripe
+              isAnimated
+            />
+          </Box>
         </CardHeader>
       </Card>
 

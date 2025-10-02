@@ -1,7 +1,28 @@
-// models/transferModel.js
+// backend/src/models/transferModel.js
+
+/**
+ * Transfer Model
+ * ---------------
+ * Este modelo gestiona la tabla `transfers`, que almacena todas las operaciones
+ * de mercado entre participantes:
+ *  - Traspasos normales.
+ *  - Clausulazos (compras forzadas por cláusula).
+ *  - Transferencias con valor y fecha/hora específica.
+ *
+ * Funcionalidades:
+ *  - Obtener todas las transferencias.
+ *  - Crear una nueva transferencia.
+ *  - Eliminar una transferencia.
+ *  - Vaciar todas las transferencias.
+ */
+
 const db = require("../db/db");
 
-// Obtener todas las transferencias con soporte para user_teams (JC)
+/**
+ * Obtiene todas las transferencias con detalles de jugador y participantes.
+ *
+ * @param {function(Error, Array=)} cb - Callback con (error, transferencias).
+ */
 function getAll(cb) {
   const sql = `
     SELECT 
@@ -28,13 +49,30 @@ function getAll(cb) {
   });
 }
 
-// Crear transferencia
+/**
+ * Crea una nueva transferencia.
+ * - Si es de tipo "clause" y se proporciona fecha + hora válidas, las usa.
+ * - Si no, asigna la fecha actual con `datetime('now')`.
+ *
+ * @param {Object} transfer - Datos de la transferencia.
+ * @param {number} transfer.player_id - ID del jugador.
+ * @param {number|null} [transfer.from_participant_id] - Participante origen.
+ * @param {number|null} [transfer.to_participant_id] - Participante destino.
+ * @param {string} transfer.type - Tipo de transferencia ("normal", "clause", etc.).
+ * @param {number} transfer.amount - Monto de la operación.
+ * @param {number|null} [transfer.clause_value] - Valor de la cláusula (si aplica).
+ * @param {string} [transfer.date] - Fecha ISO (YYYY-MM-DD) (opcional para cláusula).
+ * @param {string} [transfer.time] - Hora (HH:MM) (opcional para cláusula).
+ * @param {function(Error, Object=)} cb - Callback con (error, transferencia creada).
+ */
 function create(transfer, cb) {
   let sql, params;
-  // Si es clausulazo y se recibe date+time, usar esa fecha/hora
+
+  // Clausulazo con fecha/hora personalizada
   if (
-    transfer.type === 'clause' &&
-    transfer.date && transfer.time &&
+    transfer.type === "clause" &&
+    transfer.date &&
+    transfer.time &&
     /^\d{4}-\d{2}-\d{2}$/.test(transfer.date) &&
     /^\d{2}:\d{2}$/.test(transfer.time)
   ) {
@@ -52,9 +90,10 @@ function create(transfer, cb) {
       transfer.amount,
       transfer.clause_value || null,
       transfer.date,
-      transfer.time
+      transfer.time,
     ];
   } else {
+    // Transferencia normal (fecha = ahora)
     sql = `
       INSERT INTO transfers (
         player_id, from_participant_id, to_participant_id, 
@@ -67,7 +106,7 @@ function create(transfer, cb) {
       transfer.to_participant_id || null,
       transfer.type,
       transfer.amount,
-      transfer.clause_value || null
+      transfer.clause_value || null,
     ];
   }
 
@@ -77,7 +116,12 @@ function create(transfer, cb) {
   });
 }
 
-// Eliminar transferencia
+/**
+ * Elimina una transferencia por ID.
+ *
+ * @param {number} id - ID de la transferencia.
+ * @param {function(Error, Object=)} cb - Callback con (error, {changes}).
+ */
 function remove(id, cb) {
   db.run(`DELETE FROM transfers WHERE id = ?`, [id], function (err) {
     if (err) return cb(err);
@@ -85,7 +129,13 @@ function remove(id, cb) {
   });
 }
 
-// Vaciar todas las transferencias
+/**
+ * Elimina todas las transferencias de la tabla.
+ *
+ * ⚠️ ¡Cuidado! Esta acción vacía todo el histórico de transferencias.
+ *
+ * @param {function(Error, Object=)} cb - Callback con (error, {changes}).
+ */
 function clearAll(cb) {
   db.run(`DELETE FROM transfers`, [], function (err) {
     if (err) return cb(err);
@@ -93,4 +143,10 @@ function clearAll(cb) {
   });
 }
 
-module.exports = { getAll, create, remove, clearAll };
+// Exportamos funciones del modelo
+module.exports = { 
+  getAll, 
+  create, 
+  remove, 
+  clearAll 
+};

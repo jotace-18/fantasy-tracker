@@ -1,0 +1,22 @@
+[
+  {"id":1,"name":"Athletic Club","alias":"Athletic Bilbao"},
+  {"id":2,"name":"Atlético de Madrid","alias":"Atlético de Madrid"},
+  {"id":3,"name":"CA Osasuna","alias":"Osasuna"},
+  {"id":4,"name":"Deportivo Alavés","alias":"Alavés"},
+  {"id":5,"name":"Elche CF","alias":"Elche"},
+  {"id":6,"name":"FC Barcelona","alias":"Barcelona"},
+  {"id":7,"name":"Getafe CF","alias":"Getafe"},
+  {"id":8,"name":"Girona FC","alias":"Girona"},
+  {"id":9,"name":"Levante UD","alias":"Levante"},
+  {"id":12,"name":"RCD Mallorca","alias":"Mallorca"},
+  {"id":13,"name":"Rayo Vallecano","alias":"Rayo Vallecano"},
+  {"id":14,"name":"Real Betis","alias":"Betis"},
+  {"id":15,"name":"Real Madrid","alias":"Real Madrid"},
+  {"id":16,"name":"Real Oviedo","alias":"Oviedo"},
+  {"id":17,"name":"Real Sociedad","alias":"Real Sociedad"},
+  {"id":18,"name":"Sevilla FC","alias":"Sevilla"},
+  {"id":19,"name":"Valencia CF","alias":"Valencia"},
+  {"id":20,"name":"Villarreal CF","alias":"Villarreal"},
+  {"id":23,"name":"RCD Espanyol de Barcelona","alias":"Espanyol"},
+  {"id":34,"name":"Celta","alias":"Celta"}
+]

@@ -116,6 +116,7 @@ export default function LeaderboardPage() {
             <Tr>
               <Th>#</Th>
               <Th>Participante</Th>
+              <Th isNumeric>Dinero</Th>
               <Th isNumeric>Puntos</Th>
             </Tr>
           </Thead>
@@ -169,6 +170,20 @@ export default function LeaderboardPage() {
                         {p.name}
                       </Text>
                     )}
+                  </Td>
+                  <Td isNumeric>
+                    <Badge
+                      color={p.money >= 0 ? "green.700" : "red.700"}
+                      bg={p.money >= 0 ? "green.100" : "red.100"}
+                      px={4}
+                      py={2}
+                      borderRadius="full"
+                      fontSize="md"
+                      fontWeight="bold"
+                      boxShadow="sm"
+                    >
+                      €{(p.money ?? 0).toLocaleString("es-ES")}
+                    </Badge>
                   </Td>
                   <Td isNumeric>
                     <Badge

@@ -1,3 +1,4 @@
+const matchResultsRoutes = require("./routes/matchResultsRoutes");
 require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
@@ -45,6 +46,9 @@ app.use("/api/clock", clockRoutes);
 
 // Endpoint del calendario
 app.use("/api/calendar", calendarRoutes);
+
+// Endpoint de resultados de partidos
+app.use("/api/match-results", matchResultsRoutes);
 
 // Endpoint del mercado diario
 app.use("/api/market", marketRoutes);

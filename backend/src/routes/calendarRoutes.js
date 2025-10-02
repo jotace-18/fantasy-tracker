@@ -1,12 +1,25 @@
 // backend/src/routes/calendarRoutes.js
-const express = require('express');
+
+/**
+ * Calendar Routes
+ * ----------------
+ * Define las rutas de la API relacionadas con el calendario de jornadas.
+ *
+ * Endpoints:
+ *  - GET  /api/calendar/next               → Obtiene próximas jornadas y enfrentamientos
+ *  - PUT  /api/calendar/:jornadaId/fecha-cierre → Actualiza la fecha de cierre de una jornada
+ *
+ * Depende de: `calendarController.js`
+ */
+
+const express = require("express");
 const router = express.Router();
-const calendarController = require('../controllers/calendarController');
+const calendarController = require("../controllers/calendarController");
 
-// GET próximas jornadas y enfrentamientos
-router.get('/next', calendarController.getNextJornadas);
+// 📅 Obtener próximas jornadas con enfrentamientos
+router.get("/next", calendarController.getNextJornadas);
 
-// PUT actualizar fecha de cierre de una jornada
-router.put('/:jornadaId/fecha-cierre', calendarController.updateFechaCierre);
+// ✏️ Actualizar fecha de cierre de una jornada
+router.put("/:jornadaId/fecha-cierre", calendarController.updateFechaCierre);
 
 module.exports = router;

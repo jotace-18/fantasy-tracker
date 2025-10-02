@@ -94,6 +94,37 @@ function create(transfer, cb) {
       movePlayer(player_id, sellerId, buyerId, amount, (err3) => {
         if (err3) return cb(err3);
 
+        // Si se vende al mercado (buyerId null), resetear cláusula al valor de mercado
+        const resetClauseIfSoldToMarket = (done) => {
+          if (!buyerId) {
+            // Buscar valor de mercado actual
+            const playersModel = require("../models/playersModel");
+            playersModel.findPlayerById(player_id).then((player) => {
+              const marketValue = player?.market?.current;
+              let marketValueNum = 0;
+              if (typeof marketValue === "string") {
+                marketValueNum = parseInt(marketValue.replace(/\D/g, ""), 10) || 0;
+              } else if (typeof marketValue === "number") {
+                marketValueNum = marketValue;
+              }
+              db.run(
+                `UPDATE participant_players SET clause_value = ? WHERE player_id = ?`,
+                [marketValueNum, player_id],
+                function (errClause) {
+                  if (errClause) {
+                    console.error("❌ Error reseteando valor de cláusula al vender al mercado:", errClause.message);
+                  } else {
+                    console.log(`💶 Valor de cláusula reseteado a valor de mercado (${marketValueNum})`);
+                  }
+                  done();
+                }
+              );
+            });
+          } else {
+            done();
+          }
+        };
+
         transferModel.create(transfer, (err4, result) => {
           if (err4) return cb(err4);
 
@@ -118,13 +149,32 @@ function create(transfer, cb) {
 
           // 🔒 Tras cualquier traspaso, bloquear cláusula 14 días y desactivar clausulable
           if (buyerId) {
-            const sql = `
-              UPDATE participant_players
-              SET is_clausulable = 0,
-                  clause_lock_until = datetime('now', '+14 days')
-              WHERE participant_id = ? AND player_id = ?
-            `;
-            db.run(sql, [buyerId, player_id], function (err5) {
+            // Si es clausulazo con fecha personalizada, sumar 14 días a esa fecha
+            let lockSql, lockParams;
+            if (
+              type === "clause" &&
+              transfer.date &&
+              transfer.time &&
+              /^\d{4}-\d{2}-\d{2}$/.test(transfer.date) &&
+              /^\d{2}:\d{2}$/.test(transfer.time)
+            ) {
+              lockSql = `
+                UPDATE participant_players
+                SET is_clausulable = 0,
+                    clause_lock_until = datetime(? || ' ' || ?, '+14 days')
+                WHERE participant_id = ? AND player_id = ?
+              `;
+              lockParams = [transfer.date, transfer.time, buyerId, player_id];
+            } else {
+              lockSql = `
+                UPDATE participant_players
+                SET is_clausulable = 0,
+                    clause_lock_until = datetime('now', '+14 days')
+                WHERE participant_id = ? AND player_id = ?
+              `;
+              lockParams = [buyerId, player_id];
+            }
+            db.run(lockSql, lockParams, function (err5) {
               if (err5) {
                 console.error("❌ Error bloqueando clausula:", err5.message);
                 return cb(err5);
@@ -138,7 +188,10 @@ function create(transfer, cb) {
           } else {
             updateClauseIfNeeded((errClause) => {
               if (errClause) return cb(errClause);
-              cb(null, result);
+              // Resetear cláusula si se vende al mercado
+              resetClauseIfSoldToMarket(() => {
+                cb(null, result);
+              });
             });
           }
         });
