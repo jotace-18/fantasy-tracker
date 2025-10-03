@@ -1,5 +1,11 @@
+/**
+ * Minimal Players Controller
+ * --------------------------
+ * Endpoints CRUD para jugadores mínimos.
+ */
 const S = require("../services/minimalPlayersService");
 
+/** POST /api/minimal-players - Crea jugador mínimo. */
 function add(req, res) {
   S.addMinimalPlayer(req.body, (err, player) => {
     if (err) return res.status(400).json({ error: err.message });
@@ -7,6 +13,7 @@ function add(req, res) {
   });
 }
 
+/** GET /api/minimal-players - Lista jugadores mínimos. */
 function list(req, res) {
   S.listMinimalPlayers((err, rows) => {
     if (err) return res.status(500).json({ error: err.message });
@@ -14,6 +21,7 @@ function list(req, res) {
   });
 }
 
+/** DELETE /api/minimal-players/:id - Elimina jugador mínimo. */
 function remove(req, res) {
   const { id } = req.params;
   S.removeMinimalPlayer(id, (err, r) => {

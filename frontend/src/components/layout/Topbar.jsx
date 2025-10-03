@@ -1,10 +1,15 @@
-import { Flex, Button, Avatar, Text, Tooltip } from "@chakra-ui/react";
+import { Flex, Button, Avatar, Text, Tooltip, Spinner, useToast, IconButton, useColorMode } from "@chakra-ui/react";
 import { useEffect, useState } from "react";
+import { SunIcon, MoonIcon } from '@chakra-ui/icons';
+import { CheckIcon, WarningTwoIcon, RepeatIcon } from '@chakra-ui/icons';
 import InternalClock from "../InternalClock";
 
 export default function Topbar({ onScrape }) {
   const [lastScraped, setLastScraped] = useState(null);
   const [isValidToday, setIsValidToday] = useState(false);
+  const [scrapeState, setScrapeState] = useState('idle'); // idle|loading|success|error
+  const toast = useToast();
+  const { colorMode, toggleColorMode } = useColorMode();
 
   useEffect(() => {
     fetch("http://localhost:4000/api/scraper-metadata/last")
@@ -43,11 +48,54 @@ export default function Topbar({ onScrape }) {
       })
     : "Nunca";
 
+  const handleScrapeClick = async () => {
+    if (scrapeState === 'loading') return;
+    try {
+      setScrapeState('loading');
+      await onScrape(); // se asume que onScrape devuelve promesa si la adaptamos, si no hacemos fetch aquí
+      setScrapeState('success');
+      toast({
+        title: 'Scraper lanzado',
+        description: 'Los datos se irán actualizando en breve.',
+        status: 'success',
+        duration: 2500,
+        isClosable: true,
+        position: 'top-right'
+      });
+      setTimeout(()=> setScrapeState('idle'), 1600);
+  } catch {
+      setScrapeState('error');
+      toast({ title: 'Error lanzando scraper', status: 'error', duration: 3000, isClosable: true, position: 'top-right' });
+      setTimeout(()=> setScrapeState('idle'), 2500);
+    }
+  };
+
+  const renderButtonIcon = () => {
+    if (scrapeState === 'loading') return <Spinner size='sm' />;
+    if (scrapeState === 'success') return <CheckIcon />;
+    if (scrapeState === 'error') return <WarningTwoIcon />;
+    return <RepeatIcon />;
+  };
+
+  const buttonLabel = {
+    idle: 'Actualizar datos',
+    loading: 'Actualizando...',
+    success: '¡Listo!',
+    error: 'Error'
+  }[scrapeState];
+
   return (
-    <Flex justify="space-between" align="center" p={4} bg="white" boxShadow="md">
+    <Flex justify="space-between" align="center" p={4} bg={colorMode==='light'? 'white':'gray.800'} boxShadow="md" position="sticky" top={0} zIndex={50} backdropFilter="blur(4px)">
       <Flex align="center" gap={3}>
-        <Button colorScheme="blue" onClick={onScrape}>
-          🔄 Actualizar datos
+        <Button
+          variant={scrapeState==='idle' ? 'pulse' : 'solid'}
+          colorScheme={scrapeState === 'error' ? 'red' : 'blue'}
+          onClick={handleScrapeClick}
+          leftIcon={renderButtonIcon()}
+          isDisabled={scrapeState === 'loading'}
+          transition="all .25s"
+        >
+          {buttonLabel}
         </Button>
         <Tooltip
           label={`Último scrapeo: ${formattedDate}`}
@@ -60,8 +108,17 @@ export default function Topbar({ onScrape }) {
           </Text>
         </Tooltip>
       </Flex>
-      <InternalClock />
-      <Avatar size="sm" name="Usuario" />
+      <Flex align="center" gap={4}>
+        <InternalClock />
+        <IconButton
+          aria-label="Alternar modo de color"
+          onClick={toggleColorMode}
+          icon={colorMode==='light'? <MoonIcon /> : <SunIcon />}
+          variant='ghost'
+          size='md'
+        />
+        <Avatar size="sm" name="Usuario" />
+      </Flex>
     </Flex>
   );
 }

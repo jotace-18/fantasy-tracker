@@ -1,4 +1,7 @@
-// POST /api/participants/:id/add-money
+/**
+ * POST /api/participants/:id/add-money
+ * Suma dinero al participante.
+ */
 function addMoney(req, res) {
   const { id } = req.params;
   const { amount } = req.body;
@@ -13,7 +16,10 @@ function addMoney(req, res) {
     res.json(result);
   });
 }
-// GET /api/participants/:id/money
+/**
+ * GET /api/participants/:id/money
+ * Obtiene el saldo actual de dinero.
+ */
 function getMoney(req, res) {
   const { id } = req.params;
   participantsService.getParticipantMoney(id, (err, result) => {
@@ -25,7 +31,10 @@ function getMoney(req, res) {
   });
 }
 
-// PUT /api/participants/:id/money
+/**
+ * PUT /api/participants/:id/money
+ * Sobrescribe el saldo de dinero.
+ */
 function updateMoney(req, res) {
   const { id } = req.params;
   const { money } = req.body;
@@ -40,7 +49,10 @@ function updateMoney(req, res) {
 
 const participantsService = require("../services/participantsService");
 
-// GET /api/participants/:id
+/**
+ * GET /api/participants/:id
+ * Devuelve participante + squad.
+ */
 function getById(req, res) {
   const { id } = req.params;
   participantsService.getParticipantById(id, (err, participant) => {
@@ -54,7 +66,10 @@ function getById(req, res) {
     res.json(participant);
   });
 }
-// PUT /api/participants/:id/formation
+/**
+ * PUT /api/participants/:id/formation
+ * Actualiza la formación táctica.
+ */
 function updateFormation(req, res) {
   const { id } = req.params;
   const { formation } = req.body;
@@ -71,7 +86,10 @@ function updateFormation(req, res) {
 }
 
 // ...existing code...
-// POST /api/participants
+/**
+ * POST /api/participants
+ * Crea un nuevo participante.
+ */
 function add(req, res) {
   participantsService.addParticipant(req.body, (err, result) => {
     if (err) {
@@ -82,7 +100,10 @@ function add(req, res) {
   });
 }
 
-// GET /api/participants
+/**
+ * GET /api/participants
+ * Lista todos los participantes ordenados.
+ */
 function list(req, res) {
   participantsService.listParticipants((err, rows) => {
     if (err) {
@@ -93,7 +114,10 @@ function list(req, res) {
   });
 }
 
-// PUT /api/participants/:id/points
+/**
+ * PUT /api/participants/:id/points
+ * Actualiza manualmente el total de puntos (uso administrativo).
+ */
 function updatePoints(req, res) {
   const { id } = req.params;
   const { total_points } = req.body;
@@ -106,7 +130,10 @@ function updatePoints(req, res) {
   });
 }
 
-// DELETE /api/participants/:id
+/**
+ * DELETE /api/participants/:id
+ * Elimina participante.
+ */
 function remove(req, res) {
   const { id } = req.params;
   participantsService.removeParticipant(id, (err, result) => {
@@ -118,6 +145,10 @@ function remove(req, res) {
   });
 }
 
+/**
+ * GET /api/participants/leaderboard
+ * Devuelve ranking con historial de jornadas.
+ */
 function getLeaderboard(req, res) {
   participantsService.fetchLeaderboard((err, result) => {
     if (err) {

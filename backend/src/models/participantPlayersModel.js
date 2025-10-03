@@ -80,11 +80,20 @@ function addPlayerToTeam({ participant_id, player_id, status }, cb) {
     INSERT OR IGNORE INTO participant_players (participant_id, player_id, status)
     VALUES (?, ?, ?)
   `;
-  db.run(stmt, [participant_id, player_id, status || "reserve"], function (err) {
-    if (typeof cb === "function") {
-      if (err) return cb(err);
-      cb(null, { id: this.lastID });
-    }
+  const statusMap = { starter: 'XI', bench: 'B', reserve: 'R', XI: 'XI', B: 'B', R: 'R' };
+  const normalizedStatus = statusMap[status || 'reserve'] || 'R';
+  db.run(stmt, [participant_id, player_id, normalizedStatus], function (err) {
+    if (typeof cb !== "function") return;
+    if (err) return cb(err);
+    // this.lastID solo se rellena si realmente hizo un INSERT (no en IGNORE)
+    const inserted = this.changes > 0;
+    cb(null, { 
+      id: inserted ? this.lastID : null,
+      changes: this.changes,
+      inserted,
+      ignored: !inserted,
+      status: normalizedStatus
+    });
   });
 }
 
@@ -100,15 +109,18 @@ function addPlayerToTeam({ participant_id, player_id, status }, cb) {
  */
 function updatePlayerStatus(participant_id, player_id, status, slot_index, cb) {
   if (String(participant_id) === "8") {
+    // Normalizar posibles estados largos a cortos si la migración transformó la tabla
+    const statusMap = { starter: 'XI', bench: 'B', reserve: 'R' };
+    const normalizedStatus = statusMap[status] || status;
     const stmt = `
       UPDATE participant_players
       SET status = ?, slot_index = ?, joined_at = CURRENT_TIMESTAMP
       WHERE participant_id = ? AND player_id = ?
     `;
-    db.run(stmt, [status, slot_index, participant_id, player_id], function (err) {
+    db.run(stmt, [normalizedStatus, slot_index, participant_id, player_id], function (err) {
       if (typeof cb === "function") {
         if (err) return cb(err);
-        cb(null, { changes: this.changes });
+        cb(null, { changes: this.changes, status: normalizedStatus });
       }
     });
   } else {

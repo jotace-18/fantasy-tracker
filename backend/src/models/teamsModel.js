@@ -157,4 +157,31 @@ module.exports = {
   addTeam,
   addTeamsBulk,
   importTeams,
+  // Helpers añadidos para soporte de alta mínima de jugadores
+  /**
+   * Inserta un equipo si no existe (por nombre) generando un slug básico.
+   * Ignora el error si ya existe. Útil en inserciones mínimas (seed dinámico desde jugadores).
+   *
+   * @param {string} name - Nombre del equipo.
+   * @param {function(Error=)} cb - Callback opcional (solo error si ocurre algo inesperado distinto de duplicado).
+   */
+  upsertTeamByName(name, cb) {
+    const slug = (name || '').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
+    db.run(
+      `INSERT INTO teams (name, slug)
+       SELECT ?, ?
+       WHERE NOT EXISTS (SELECT 1 FROM teams WHERE name = ?)`,
+      [name, slug, name],
+      function (err) { if (typeof cb === 'function') cb(err || undefined); }
+    );
+  },
+  /**
+   * Obtiene un equipo por su nombre exacto.
+   *
+   * @param {string} name - Nombre exacto del equipo.
+   * @param {function(Error, Object=)} cb - Callback con (error, equipo|null).
+   */
+  getTeamByName(name, cb) {
+    db.get(`SELECT * FROM teams WHERE name = ?`, [name], (err,row)=> cb(err,row));
+  }
 };

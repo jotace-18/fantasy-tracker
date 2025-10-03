@@ -1,6 +1,20 @@
+/**
+ * Participant Players Service
+ * ---------------------------
+ * Lógica de orquestación sobre la tabla de relación participante ↔ jugadores.
+ * - Refresca cláusula si expiró el lock al leer el equipo.
+ * - Centraliza altas/bajas/updates de status y cláusulas.
+ */
 const participantPlayersModel = require("../models/participantPlayersModel");
 
-// Obtener plantilla y actualizar cláusula/clausulable si expiró el lock (unificado)
+/**
+ * Obtiene la plantilla de un participante. Si hay locks expirados:
+ *  - Marca jugador como clausulable.
+ *  - Resetea clause_value al market_value_num.
+ * La actualización se hace antes de devolver los datos.
+ * @param {number} participantId
+ * @param {function(Error, Array=)} cb
+ */
 function fetchTeam(participantId, cb) {
   participantPlayersModel.getTeamByParticipantId(participantId, async (err, rows) => {
     if (err) return cb(err);
@@ -26,7 +40,7 @@ function fetchTeam(participantId, cb) {
   });
 }
 
-// Añadir jugador (unificado)
+/** Añade jugador a plantilla (INSERT OR IGNORE). */
 function addPlayer(data, cb) {
   participantPlayersModel.addPlayerToTeam(data, (err, res) => {
     if (err) return cb(err);
@@ -34,12 +48,12 @@ function addPlayer(data, cb) {
   });
 }
 
-// Actualizar status y slot_index (unificado)
+/** Actualiza status y slot_index (solo participant_id=8 según regla). */
 function updateStatus(participant_id, player_id, status, slot_index, cb) {
   participantPlayersModel.updatePlayerStatus(participant_id, player_id, status, slot_index, cb);
 }
 
-// Eliminar jugador (unificado)
+/** Elimina jugador de la plantilla. */
 function removePlayer(participant_id, player_id, cb) {
   participantPlayersModel.removePlayerFromTeam(participant_id, player_id, (err, res) => {
     if (err) return cb(err);
@@ -47,17 +61,17 @@ function removePlayer(participant_id, player_id, cb) {
   });
 }
 
-// Editar valor de cláusula (unificado)
+/** Actualiza valor de cláusula. */
 function updateClauseValue(participant_id, player_id, clause_value, cb) {
   participantPlayersModel.updateClauseValue(participant_id, player_id, clause_value, cb);
 }
 
-// Editar clausulabilidad (unificado)
+/** Activa/desactiva si es clausulable. */
 function updateClausulable(participant_id, player_id, is_clausulable, cb) {
   participantPlayersModel.updateClausulable(participant_id, player_id, is_clausulable, cb);
 }
 
-// Editar lock de cláusula (unificado)
+/** Actualiza fecha/hora de lock de cláusula. */
 function updateClauseLock(participant_id, player_id, clause_lock_until, cb) {
   participantPlayersModel.updateClauseLock(participant_id, player_id, clause_lock_until, cb);
 }

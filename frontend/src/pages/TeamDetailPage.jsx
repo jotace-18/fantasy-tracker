@@ -1,298 +1,129 @@
-// Normaliza un string: quita tildes, pasa a minúsculas y recorta espacios
-function normalizaNombre(nombre) {
-  return nombre
-    ? nombre.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase().trim()
-    : "";
+import { useEffect, useState, useMemo } from 'react';
+import { useParams } from 'react-router-dom';
+import { Box, Spinner, Text, Heading, SimpleGrid, VStack, Card, CardHeader, CardBody } from '@chakra-ui/react';
+import TeamRosterTable from '../components/team/TeamRosterTable';
+import SurroundingClassification from '../components/team/SurroundingClassification';
+import UpcomingMatches from '../components/team/UpcomingMatches';
+
+function normalizaNombre(nombre){
+  return nombre ? nombre.normalize('NFD').replace(/\p{Diacritic}/gu,'').toLowerCase().trim() : '';
 }
-import { useEffect, useState, useMemo } from "react";
-import { useParams, Link } from "react-router-dom";
-import {
-  Box, Spinner, Text, Heading, Table, Thead, Tbody, Tr, Th, Td,
-  TableContainer, Badge, Divider, SimpleGrid, VStack, HStack, Flex, Card, CardHeader, CardBody
-} from "@chakra-ui/react";
 
-function TeamDetailPage() {
-  const { id } = useParams();
-  const [players, setPlayers] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [sortBy, setSortBy] = useState("total_points");
-  const [order, setOrder] = useState("DESC");
+export default function TeamDetailPage(){
+  const { id: param } = useParams();
+  const isNumericId = useMemo(()=>/^\d+$/.test(param),[param]);
+  const teamIdentifier = param;
+  const [players,setPlayers] = useState([]);
+  const [loading,setLoading] = useState(true);
+  const [sortBy,setSortBy] = useState('total_points');
+  const [order,setOrder] = useState('DESC');
+  const [teams,setTeams] = useState([]);
+  const [equipoActualNombre,setEquipoActualNombre] = useState('');
+  const [calendar,setCalendar] = useState([]);
+  const [loadingExtra,setLoadingExtra] = useState(true);
+  const [derivedTeamId,setDerivedTeamId] = useState(null);
+  const [slugFetchTried,setSlugFetchTried] = useState(false);
+  const [fallbackTried,setFallbackTried] = useState(false);
+  const [fallbackLoading,setFallbackLoading] = useState(false);
 
-  const [teams, setTeams] = useState([]);
-  const [equipoActualNombre, setEquipoActualNombre] = useState("");
-  const [calendar, setCalendar] = useState([]);
-  const [loadingExtra, setLoadingExtra] = useState(true);
+  const slugify = (str)=> String(str||'')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .toLowerCase().replace(/[^a-z0-9\s-]/g,'')
+    .trim().replace(/\s+/g,'-').replace(/-+/g,'-');
 
-  // --- Fetch plantilla ---
-  useEffect(() => {
+  useEffect(()=>{
     setLoading(true);
-    fetch(`http://localhost:4000/api/teams/${id}/players?sortBy=${sortBy}&order=${order}`)
-      .then((res) => res.json())
-      .then((data) => {
-        setPlayers(Array.isArray(data) ? data : []);
-        setLoading(false);
-      })
-      .catch((err) => {
-        console.error("❌ Error al cargar jugadores del equipo:", err);
-        setPlayers([]);
-        setLoading(false);
-      });
-  }, [id, sortBy, order]);
+    setSlugFetchTried(false);
+    setFallbackTried(false);
+    let abort=false;
+    (async()=>{
+      try{
+        const url = isNumericId
+          ? `http://localhost:4000/api/teams/${teamIdentifier}/players?sortBy=${sortBy}&order=${order}`
+          : `http://localhost:4000/api/players/teams/${teamIdentifier}/players`;
+        const res = await fetch(url);
+        if(!res.ok) throw new Error('resp no OK');
+        const data = await res.json();
+        if(abort) return; setPlayers(Array.isArray(data)?data:[]); if(!isNumericId) setSlugFetchTried(true);
+      }catch(e){
+        console.error('[TeamDetail] error fetch principal',e);
+        if(!isNumericId) setSlugFetchTried(true);
+        if(!isNumericId && /^\d+$/.test(teamIdentifier)){
+          try{const r2=await fetch(`http://localhost:4000/api/teams/${teamIdentifier}/players?sortBy=${sortBy}&order=${order}`);const d2=await r2.json();if(!abort) setPlayers(Array.isArray(d2)?d2:[]);}catch(e2){console.error('[TeamDetail] fallback id directo falló',e2);} }
+        else if(!abort){ setPlayers([]);}      
+      }finally{ if(!abort) setLoading(false);}    
+    })();
+    return ()=>{abort=true};
+  },[teamIdentifier,isNumericId,sortBy,order]);
 
-  // --- Fetch clasificación + calendario + reloj ---
-  useEffect(() => {
+  useEffect(()=>{
     setLoadingExtra(true);
+    let abort=false;
     Promise.all([
-      fetch("http://localhost:4000/api/teams").then((res) => res.json()),
-      fetch("http://localhost:4000/api/calendar/next?limit=38").then((res) => res.json()),
-      fetch("http://localhost:4000/api/clock").then((res) => res.json())
-    ])
-      .then(([teamsData, calendarData, clockData]) => {
-        const sorted = [...teamsData].sort((a, b) => (a.position ?? 99) - (b.position ?? 99));
-        setTeams(sorted);
+      fetch('http://localhost:4000/api/teams').then(r=>r.json()),
+      fetch('http://localhost:4000/api/calendar/next?limit=38').then(r=>r.json()),
+      fetch('http://localhost:4000/api/clock').then(r=>r.json())
+    ]).then(([teamsData,calendarData,clockData])=>{
+      if(abort) return; const sorted=[...teamsData].sort((a,b)=>(a.position??99)-(b.position??99)); setTeams(sorted);
+      let equipo = isNumericId ? sorted.find(t=>String(t.id)===String(teamIdentifier)) : sorted.find(t=>t.slug===teamIdentifier);
+      if(!equipo && !isNumericId){ equipo = sorted.find(t=>slugify(t.name)===teamIdentifier); }
+      setEquipoActualNombre(equipo?equipo.name:''); if(equipo) setDerivedTeamId(equipo.id);
+      const now=new Date(clockData.currentTime); const TOL=3*24*60*60*1000; let idx=0;
+      for(let i=0;i<calendarData.length;i++){ const j=calendarData[i]; if(j.fecha_cierre){ const cierre=new Date(j.fecha_cierre); if(cierre.getTime()+TOL>now.getTime()){ idx=i; break; } } }
+      if(idx>calendarData.length-3) idx=Math.max(0,calendarData.length-3);
+      setCalendar(calendarData.slice(idx,idx+3));
+      setLoadingExtra(false);
+    }).catch(e=>{ console.error('[TeamDetail] extra error',e); if(!abort) setLoadingExtra(false); });
+    return ()=>{abort=true};
+  },[teamIdentifier,isNumericId]);
 
-        // Guardar el nombre del equipo actual
-        const equipo = sorted.find(t => String(t.id) === String(id));
-        setEquipoActualNombre(equipo ? equipo.name : "");
+  const surroundingTeams = useMemo(()=>{
+    if(!teams.length) return [];
+    const idx = isNumericId
+      ? teams.findIndex(t=>String(t.id)===String(teamIdentifier))
+      : (()=>{ let i=teams.findIndex(t=>t.slug===teamIdentifier); if(i===-1) i=teams.findIndex(t=>slugify(t.name)===teamIdentifier); return i; })();
+    if(idx===-1) return [];
+    return teams.slice(Math.max(0,idx-2),idx+3);
+  },[teams,isNumericId,teamIdentifier]);
 
-        const now = new Date(clockData.currentTime);
+  useEffect(()=>{
+    let abort=false;
+    const needsFallback = !isNumericId && slugFetchTried && !fallbackTried && players.length===0 && derivedTeamId;
+    if(needsFallback){(async()=>{try{setFallbackLoading(true); const r=await fetch(`http://localhost:4000/api/teams/${derivedTeamId}/players?sortBy=${sortBy}&order=${order}`); if(!r.ok) throw new Error('fallback no ok'); const d=await r.json(); if(!abort) setPlayers(Array.isArray(d)?d:[]);}catch(e){console.error('[TeamDetail] fallback derivado error',e);}finally{ if(!abort){ setFallbackLoading(false); setFallbackTried(true);} }})();}
+    return ()=>{abort=true};
+  },[isNumericId,slugFetchTried,fallbackTried,players.length,derivedTeamId,sortBy,order]);
 
-        // Mostrar desde la primera jornada con fecha_cierre futura (o dentro de tolerancia), y las dos siguientes aunque tengan fecha_cierre null
-        const TOLERANCIA_MS = 3 * 24 * 60 * 60 * 1000;
-        let idxActual = 0;
-        for (let i = 0; i < calendarData.length; i++) {
-          const j = calendarData[i];
-          if (j.fecha_cierre) {
-            const cierre = new Date(j.fecha_cierre);
-            if (cierre.getTime() + TOLERANCIA_MS > now.getTime()) {
-              idxActual = i;
-              break;
-            }
-          }
-        }
-        // Si el reloj está después de todas las fechas de cierre + tolerancia, mostrar las últimas 3
-        if (idxActual > calendarData.length - 3) idxActual = Math.max(0, calendarData.length - 3);
-        const proximas = calendarData.slice(idxActual, idxActual + 3);
-        setCalendar(proximas);
+  const handleSort = (field,defaultOrder='ASC')=>{
+    if(sortBy===field){ setOrder(order==='ASC'?'DESC':'ASC'); } else { setSortBy(field); setOrder(defaultOrder);} };
+  const renderArrow=(field)=> sortBy===field ? (order==='ASC'?' ▲':' ▼') : '';
 
-        setLoadingExtra(false);
-      })
-      .catch((err) => {
-        console.error("❌ Error al cargar extra:", err);
-        setLoadingExtra(false);
-      });
-  }, [id]);
-
-
-
-  // --- Clasificación reducida (2 arriba y 2 abajo del actual) ---
-  const surroundingTeams = useMemo(() => {
-    if (!teams.length) return [];
-    const idx = teams.findIndex((t) => String(t.id) === String(id));
-    if (idx === -1) return [];
-    return teams.slice(Math.max(0, idx - 2), idx + 3);
-  }, [teams, id]);
-
-  const handleSort = (field, defaultOrder = "ASC") => {
-    if (sortBy === field) {
-      setOrder(order === "ASC" ? "DESC" : "ASC");
-    } else {
-      setSortBy(field);
-      setOrder(defaultOrder);
-    }
-  };
-
-  const renderArrow = (field) => {
-    if (sortBy !== field) return "";
-    return order === "ASC" ? " ▲" : " ▼";
-  };
-
-  const getBadgeColor = (pos) => {
-    if (!pos) return "gray";
-    if (pos >= 1 && pos <= 4) return "green";
-    if (pos === 5 || pos === 6) return "yellow";
-    if (pos >= teams.length - 2) return "red";
-    return "blue";
-  };
-
-  if (loading) {
-    return (
-      <Box textAlign="center" mt="10">
-        <Spinner size="xl" />
-        <Text mt="2">Cargando equipo...</Text>
-      </Box>
-    );
+  if(loading){
+    return <Box textAlign='center' mt='10'><Spinner size='xl'/><Text mt='2'>Cargando equipo...</Text></Box>;
   }
 
-  return (
-    <Box p={6} maxW="1400px" mx="auto">
-      {/* Header */}
-      <Heading size="lg" mb={6} textAlign="center">
-        {equipoActualNombre ? `Detalles del ${equipoActualNombre}` : `Detalle del Equipo #${id}`}
-      </Heading>
-
-      {/* Layout en 2 columnas */}
-      <SimpleGrid columns={{ base: 1, md: 2 }} spacing={8}>
-        {/* --- Plantilla --- */}
+  return <Box p={6} maxW='1400px' mx='auto'>
+    <Heading size='lg' mb={6} textAlign='center'>{equipoActualNombre?`Detalles de ${equipoActualNombre}`:`Equipo: ${teamIdentifier}`}</Heading>
+    <SimpleGrid columns={{base:1,md:2}} spacing={8}>
+      <Card>
+        <CardHeader><Heading size='md'>Plantilla</Heading></CardHeader>
+        <CardBody>
+          <TeamRosterTable players={players} sortBy={sortBy} order={order} handleSort={handleSort} renderArrow={renderArrow} loadingFallback={fallbackLoading}/>
+        </CardBody>
+      </Card>
+      <VStack spacing={6} align='stretch'>
         <Card>
-          <CardHeader>
-            <Heading size="md">Plantilla</Heading>
-          </CardHeader>
+          <CardHeader><Heading size='md'>Clasificación alrededor</Heading></CardHeader>
           <CardBody>
-            <TableContainer>
-              <Table variant="striped" colorScheme="teal" size="sm">
-                <Thead>
-                  <Tr>
-                    <Th cursor="pointer" onClick={() => handleSort("name", "ASC")}>
-                      Nombre{renderArrow("name")}
-                    </Th>
-                    <Th cursor="pointer" onClick={() => handleSort("position", "ASC")}>
-                      Posición{renderArrow("position")}
-                    </Th>
-                    <Th isNumeric cursor="pointer" onClick={() => handleSort("market_value", "DESC")}>
-                      Valor Mercado{renderArrow("market_value")}
-                    </Th>
-                    <Th isNumeric cursor="pointer" onClick={() => handleSort("total_points", "DESC")}>
-                      Puntos Totales{renderArrow("total_points")}
-                    </Th>
-                  </Tr>
-                </Thead>
-                <Tbody>
-                  {players.map((player) => (
-                    <Tr key={player.id}>
-                      <Td>
-                        <Link to={`/players/${player.id}`} style={{ color: "teal", fontWeight: "bold" }}>
-                          {player.name}
-                        </Link>
-                      </Td>
-                      <Td>{player.position}</Td>
-                      <Td isNumeric>
-                        {typeof player.market_value_num === "number" && !isNaN(player.market_value_num)
-                          ? player.market_value_num.toLocaleString("es-ES")
-                          : "-"}
-                      </Td>
-                      <Td isNumeric color={player.total_points < 0 ? "red.500" : "green.600"}>
-                        {player.total_points}
-                      </Td>
-                    </Tr>
-                  ))}
-                </Tbody>
-              </Table>
-            </TableContainer>
+            <SurroundingClassification teams={teams} surroundingTeams={surroundingTeams} currentIdentifier={teamIdentifier} isNumericId={isNumericId} loading={loadingExtra} slugify={slugify}/>
           </CardBody>
         </Card>
-
-        {/* --- Clasificación + calendario --- */}
-        <VStack spacing={6} align="stretch">
-          {/* Clasificación */}
-          <Card>
-            <CardHeader>
-              <Heading size="md">Clasificación alrededor</Heading>
-            </CardHeader>
-            <CardBody>
-              {loadingExtra ? (
-                <Spinner size="lg" />
-              ) : (
-                <TableContainer>
-                  <Table variant="simple" size="sm">
-                    <Thead>
-                      <Tr>
-                        <Th>Pos</Th>
-                        <Th>Equipo</Th>
-                        <Th isNumeric>Puntos</Th>
-                      </Tr>
-                    </Thead>
-                    <Tbody>
-                      {surroundingTeams.map((team) => (
-                        <Tr key={team.id} bg={String(team.id) === String(id) ? "yellow.100" : "transparent"}>
-                          <Td>
-                            <Badge colorScheme={getBadgeColor(team.position)}>
-                              {team.position ?? "-"}
-                            </Badge>
-                          </Td>
-                          <Td>
-                            <Link to={`/teams/${team.id}`}>{team.name}</Link>
-                          </Td>
-                          <Td isNumeric>{team.points ?? "-"}</Td>
-                        </Tr>
-                      ))}
-                    </Tbody>
-                  </Table>
-                </TableContainer>
-              )}
-            </CardBody>
-          </Card>
-
-          {/* Calendario */}
-          <Card>
-            <CardHeader>
-              <Heading size="md">Próximas jornadas</Heading>
-            </CardHeader>
-            <CardBody>
-              {loadingExtra ? (
-                <Spinner size="lg" />
-              ) : (
-                <VStack align="stretch" spacing={4}>
-                  {equipoActualNombre && (() => {
-                    const normEquipo = normalizaNombre(equipoActualNombre);
-                    // Log para depuración
-                    if (calendar.length > 0) {
-                      console.log('Equipo actual:', equipoActualNombre, '| Normalizado:', normEquipo);
-                      calendar.forEach((jornada) => {
-                        if (jornada.enfrentamientos) {
-                          jornada.enfrentamientos.forEach((e, i) => {
-                            console.log(`J${jornada.numero} Enfrentamiento ${i}:`,
-                              'local:', e.equipo_local, '| norm:', normalizaNombre(e.equipo_local),
-                              'visitante:', e.equipo_visitante, '| norm:', normalizaNombre(e.equipo_visitante)
-                            );
-                          });
-                        }
-                      });
-                    }
-                    let hayPartidos = false;
-                    const jornadasRender = calendar.map((jornada) => {
-                      const enf = jornada.enfrentamientos?.find(e => {
-                        const localNorm = normalizaNombre(e.equipo_local);
-                        const visitanteNorm = normalizaNombre(e.equipo_visitante);
-                        // Coincidencia exacta o parcial (uno contiene al otro)
-                        return (
-                          localNorm === normEquipo || visitanteNorm === normEquipo ||
-                          normEquipo.includes(localNorm) || localNorm.includes(normEquipo) ||
-                          normEquipo.includes(visitanteNorm) || visitanteNorm.includes(normEquipo)
-                        );
-                      });
-                      if (!enf) return null;
-                      hayPartidos = true;
-                      const localNorm = normalizaNombre(enf.equipo_local);
-                      const esLocal =
-                        localNorm === normEquipo ||
-                        normEquipo.includes(localNorm) || localNorm.includes(normEquipo);
-                      const rival = esLocal ? enf.equipo_visitante : enf.equipo_local;
-                      const icono = esLocal ? '🏠' : '✈️';
-                      return (
-                        <Box key={jornada.id}>
-                          <Text fontWeight="bold" mb={2}>Jornada {jornada.numero}</Text>
-                          <HStack justify="flex-start" px={2}>
-                            <Text fontSize="xl">{icono}</Text>
-                            <Text fontWeight="semibold" fontSize="lg">{rival}</Text>
-                          </HStack>
-                          <Divider mt={2} />
-                        </Box>
-                      );
-                    });
-                    if (!hayPartidos) {
-                      return <Text color="gray.500" px={2}>No hay próximos partidos para este equipo.</Text>;
-                    }
-                    return jornadasRender;
-                  })()}
-                </VStack>
-              )}
-            </CardBody>
-          </Card>
-        </VStack>
-      </SimpleGrid>
-    </Box>
-  );
+        <Card>
+          <CardHeader><Heading size='md'>Próximas jornadas</Heading></CardHeader>
+          <CardBody>
+            {loadingExtra ? <Spinner size='lg'/> : <UpcomingMatches calendar={calendar} teamId={derivedTeamId} teamName={equipoActualNombre} normalizeFn={normalizaNombre}/>}  
+          </CardBody>
+        </Card>
+      </VStack>
+    </SimpleGrid>
+  </Box>;
 }
-
-export default TeamDetailPage;

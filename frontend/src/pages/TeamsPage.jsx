@@ -1,10 +1,19 @@
 // src/pages/TeamsPage.jsx
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link as RouterLink } from "react-router-dom";
 import {
   Table, Thead, Tbody, Tr, Th, Td,
-  TableContainer, Box, Spinner, Text, Badge
+  TableContainer, Box, Spinner, Text, Badge, Card, CardHeader, CardBody,
+  HStack, Tooltip, Flex, Icon, useColorModeValue, Divider
 } from "@chakra-ui/react";
+import { FiTrendingUp, FiTrendingDown, FiMinus } from 'react-icons/fi';
+
+function slugify(str){
+  return String(str||'')
+    .normalize('NFD').replace(/\p{Diacritic}/gu,'')
+    .toLowerCase().replace(/[^a-z0-9\s-]/g,'')
+    .trim().replace(/\s+/g,'-').replace(/-+/g,'-');
+}
 
 function TeamsPage() {
   const [teams, setTeams] = useState([]);
@@ -29,11 +38,35 @@ function TeamsPage() {
       });
   }, []);
 
+  const zoneInfo = {
+    champions: { label: 'Champions League', color: 'green', range: [1,4] },
+    europa: { label: 'Europa / Conference', color: 'yellow', range: [5,6] },
+    descenso: { label: 'Descenso', color: 'red', rangeDynamic: (len)=> [len-2, len] }
+  };
+
+  const totalTeams = teams.length;
+  const enrichedTeams = teams.map(t => {
+    let zone = null;
+    if (t.position != null) {
+      if (t.position >= zoneInfo.champions.range[0] && t.position <= zoneInfo.champions.range[1]) zone = 'champions';
+      else if (t.position >= zoneInfo.europa.range[0] && t.position <= zoneInfo.europa.range[1]) zone = 'europa';
+      else {
+        const [start, end] = zoneInfo.descenso.rangeDynamic(totalTeams);
+        if (t.position >= start && t.position <= end) zone = 'descenso';
+      }
+    }
+    return { ...t, zone };
+  });
+
+  const bgGrad = useColorModeValue('linear(to-r, gray.50, white)', 'linear(to-r, gray.700, gray.800)');
+  const headerBg = useColorModeValue('gray.100', 'gray.600');
+  const hoverBg = useColorModeValue('blue.50','gray.700');
+
   if (loading) {
     return (
-      <Box textAlign="center" mt="10">
-        <Spinner size="xl" />
-        <Text mt="2">Cargando clasificación de equipos...</Text>
+      <Box p={6} textAlign='center'>
+        <Spinner size='xl' />
+        <Text mt={2} fontSize='sm' color='gray.500'>Cargando clasificación de equipos...</Text>
       </Box>
     );
   }
@@ -47,64 +80,78 @@ function TeamsPage() {
   };
 
   return (
-    <Box p={4}>
-      <Text fontSize="xl" fontWeight="bold" mb={4}>
-        Clasificación de LaLiga
-      </Text>
-      <TableContainer>
-        <Table variant="striped" colorScheme="teal" size="sm">
-          <Thead>
-            <Tr>
-              <Th>Pos</Th>
-              <Th>Equipo</Th>
-              <Th isNumeric>Puntos</Th>
-              <Th isNumeric>PJ</Th>
-              <Th isNumeric>G</Th>
-              <Th isNumeric>E</Th>
-              <Th isNumeric>P</Th>
-              <Th isNumeric>GF</Th>
-              <Th isNumeric>GC</Th>
-              <Th isNumeric>DG</Th>
-            </Tr>
-          </Thead>
-          <Tbody>
-            {teams.map((team) => (
-              <Tr key={team.id}>
-                <Td>
-                  <Badge
-                    colorScheme={getBadgeColor(team.position)}
-                    fontSize="sm"
-                  >
-                    {team.position ?? "-"}
-                  </Badge>
-                </Td>
-                <Td fontWeight="medium">
-                  <Link to={`/teams/${team.id}`}>{team.name}</Link>
-                </Td>
-                <Td isNumeric>{team.points ?? "-"}</Td>
-                <Td isNumeric>{team.played ?? "-"}</Td>
-                <Td isNumeric color="green.600">{team.won ?? "-"}</Td>
-                <Td isNumeric color="yellow.600">{team.drawn ?? "-"}</Td>
-                <Td isNumeric color="red.600">{team.lost ?? "-"}</Td>
-                <Td isNumeric>{team.gf ?? "-"}</Td>
-                <Td isNumeric>{team.ga ?? "-"}</Td>
-                <Td
-                  isNumeric
-                  color={
-                    team.gd > 0
-                      ? "green.600"
-                      : team.gd < 0
-                      ? "red.600"
-                      : "gray.600"
-                  }
-                >
-                  {team.gd ?? "-"}
-                </Td>
-              </Tr>
-            ))}
-          </Tbody>
-        </Table>
-      </TableContainer>
+    <Box p={{base:4, md:6}}>
+      <Card borderRadius='2xl' bgGradient={bgGrad} shadow='md' overflow='hidden'>
+        <CardHeader pb={2}>
+          <Flex justify='space-between' align='center' wrap='wrap' gap={3}>
+            <Text fontSize='2xl' fontWeight='bold'>Clasificación de LaLiga</Text>
+            <HStack spacing={2} fontSize='xs' color='gray.500'>
+              <HStack spacing={1}><Badge colorScheme='green'>1-4</Badge><Text>Champions</Text></HStack>
+              <HStack spacing={1}><Badge colorScheme='yellow'>5-6</Badge><Text>Europa</Text></HStack>
+              <HStack spacing={1}><Badge colorScheme='red'>Descenso</Badge></HStack>
+            </HStack>
+          </Flex>
+          <Divider mt={3}/>
+        </CardHeader>
+        <CardBody pt={3}>
+          <TableContainer>
+            <Table size='sm'>
+              <Thead bg={headerBg} position='sticky' top={0} zIndex={1} boxShadow='sm'>
+                <Tr>
+                  <Th>Pos</Th>
+                  <Th>Equipo</Th>
+                  <Th isNumeric>Puntos</Th>
+                  <Th isNumeric>PJ</Th>
+                  <Th isNumeric>G</Th>
+                  <Th isNumeric>E</Th>
+                  <Th isNumeric>P</Th>
+                  <Th isNumeric>GF</Th>
+                  <Th isNumeric>GC</Th>
+                  <Th isNumeric>DG</Th>
+                </Tr>
+              </Thead>
+              <Tbody>
+                {enrichedTeams.map(team => {
+                  const slug = team.slug || slugify(team.name);
+                  const diffIcon = team.gd > 0 ? FiTrendingUp : team.gd < 0 ? FiTrendingDown : FiMinus;
+                  return (
+                    <Tr key={team.id}
+                      _hover={{ bg: hoverBg, cursor: 'pointer' }}
+                      transition='background .15s'
+                      onClick={()=> window.location.href = `/teams/${slug}`}
+                    >
+                      <Td>
+                        <Tooltip label={team.zone ? zoneInfo[team.zone].label : 'Posición'} hasArrow>
+                          <Badge colorScheme={getBadgeColor(team.position)} fontSize='sm' borderRadius='md' px={2} py={1}>
+                            {team.position ?? '-'}
+                          </Badge>
+                        </Tooltip>
+                      </Td>
+                      <Td fontWeight='medium'>
+                        <Text as={RouterLink} to={`/teams/${slug}`} _hover={{ textDecoration:'underline' }}>
+                          {team.name}
+                        </Text>
+                      </Td>
+                      <Td isNumeric fontWeight='semibold'>{team.points ?? '-'}</Td>
+                      <Td isNumeric>{team.played ?? '-'}</Td>
+                      <Td isNumeric color='green.600' fontWeight='medium'>{team.won ?? '-'}</Td>
+                      <Td isNumeric color='yellow.600' fontWeight='medium'>{team.drawn ?? '-'}</Td>
+                      <Td isNumeric color='red.600' fontWeight='medium'>{team.lost ?? '-'}</Td>
+                      <Td isNumeric>{team.gf ?? '-'}</Td>
+                      <Td isNumeric>{team.ga ?? '-'}</Td>
+                      <Td isNumeric color={team.gd>0?'green.600':team.gd<0?'red.600':'gray.600'}>
+                        <HStack spacing={1} justify='flex-end'>
+                          <Icon as={diffIcon} />
+                          <Text>{team.gd ?? '-'}</Text>
+                        </HStack>
+                      </Td>
+                    </Tr>
+                  )})}
+              </Tbody>
+            </Table>
+          </TableContainer>
+        </CardBody>
+      </Card>
     </Box>
   );
 }

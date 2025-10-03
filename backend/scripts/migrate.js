@@ -1,4 +1,10 @@
 // migrate.js
+// -------------------------------------------------------------
+// Migración puntual que transforma la tabla players reemplazando
+// la columna team_id (numérica) por team (TEXT). Mantiene datos
+// existentes copiándolos en una tabla nueva y renombrando.
+// Uso: node scripts/migrate.js
+// Precaución: crea tabla intermedia y sobrescribe estructura.
 const sqlite3 = require("sqlite3").verbose();
 const path = require("path");
 

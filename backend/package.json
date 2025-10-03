@@ -8,7 +8,15 @@
   },
   "scripts": {
     "start": "node src/index.js",
-    "dev": "nodemon src/index.js"
+    "dev": "nodemon src/index.js",
+    "scrape": "node scripts/runScraper.js",
+    "add-indexes": "node scripts/addIndexes.js",
+    "backup": "node scripts/backupDb.js",
+    "test:extract": "jest tests/extractTitularNextJor.test.js --runInBand",
+    "test": "jest --runInBand",
+    "ci:test": "jest --coverage --runInBand --reporters=default --reporters=jest-junit",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage"
   },
   "keywords": [
     "fantasy",
@@ -26,10 +34,32 @@
     "csv-parse": "^6.1.0",
     "dotenv": "^17.2.2",
     "express": "^4.19.2",
-    "p-limit": "^7.1.1",
+  "p-limit": "^3.1.0",
     "sqlite3": "^5.1.7"
   },
   "devDependencies": {
-    "nodemon": "^3.1.10"
+    "jest": "^29.7.0",
+    "supertest": "^7.1.1",
+    "nodemon": "^3.1.10",
+    "jest-junit": "^16.0.0"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "roots": ["<rootDir>/tests"],
+    "setupFiles": ["<rootDir>/tests/setupPreEnv.js"],
+    "collectCoverageFrom": [
+      "src/**/*.js",
+      "!src/index.js",
+      "!src/logger.js"
+    ],
+    "setupFilesAfterEnv": ["<rootDir>/tests/setupLogging.js"],
+    "coverageThreshold": {
+      "global": {
+        "branches": 35,
+        "functions": 45,
+        "lines": 50,
+        "statements": 50
+      }
+    }
   }
 }

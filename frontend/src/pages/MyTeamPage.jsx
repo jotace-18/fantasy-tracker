@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   Box,
   Flex,
@@ -6,41 +6,72 @@ import {
   Text,
   VStack,
   HStack,
-  Center,
   Button,
   useDisclosure,
   Spinner,
-  Tooltip,
   Modal,
   ModalOverlay,
   ModalContent,
   ModalHeader,
-  ModalFooter,
   ModalBody,
   ModalCloseButton,
+  Skeleton,
+  SkeletonCircle,
+  useColorModeValue,
+  VisuallyHidden,
+  Grid,
+  GridItem,
+  Tabs,
+  TabList,
+  TabPanels,
+  Tab,
+  TabPanel,
+  Stat,
+  StatLabel,
+  StatNumber,
+  Divider,
+  IconButton
 } from "@chakra-ui/react";
+import { motion } from 'framer-motion';
 import ClauseLockModal from "../components/ClauseLockModal";
-import { FORMATIONS, FORMATION_MAP } from "../utils/formations";
+import { FORMATIONS } from "../utils/formations"; // FORMATION_MAP ya no necesario aquí
 import { Link } from "react-router-dom";
 import PlayerSearch from "../components/PlayerSearch";
-import { WarningTwoIcon, InfoOutlineIcon } from "@chakra-ui/icons";
-import { EditIcon } from "@chakra-ui/icons";
+// removed InfoOutlineIcon (no longer used in new layout)
 import useCumulativeRankHistory from "../hooks/useCumulativeRankHistory";
+import useMyTeamData from "../hooks/useMyTeamData";
 import CumulativeRankChart from "../components/CumulativeRankChart";
 import PlayerTransferLog from "../components/PlayerTransferLog";
+import Pitch from "../components/myteam/Pitch";
+import BenchArea from "../components/myteam/BenchArea";
+import PlayerRoster from "../components/myteam/PlayerRoster";
+import MoneyPanel from "../components/myteam/MoneyPanel";
 
 export default function MyTeamPage() {
   const [, setNow] = useState(Date.now());
-  const [formation, setFormation] = useState("4-3-3");
-  const [myPlayers, setMyPlayers] = useState([]);
+  // Data hook
+  const {
+    participantId: myParticipantId,
+    formation, changeFormation, setXI, setReserve,
+    players: myPlayers, orderedPlayers, positions,
+    money, saveMoney, totalMarketValueXI,
+    addPlayer, removePlayer, updateClause,
+    loadingPlayers
+  } = useMyTeamData(8);
+
   const [selectedSlot, setSelectedSlot] = useState(null);
-  const [money, setMoney] = useState(null);
   const [refreshKey] = useState(0);
   const [moneyEdit, setMoneyEdit] = useState({ open: false, value: '' });
   const [clauseEdit, setClauseEdit] = useState({ open: false, player: null });
   const [clauseForm, setClauseForm] = useState({ clause_value: '', is_clausulable: false, lock_days: 0, lock_hours: 0 });
+  const [lastClauseUpdated, setLastClauseUpdated] = useState(null);
+  const [announceMsg, setAnnounceMsg] = useState('');
+  const prevMoney = useRef(null);
+  const prevValueXI = useRef(null);
+  const [flashValueXI, setFlashValueXI] = useState(false);
+  const lastFocusedRef = useRef(null);
 
-  // Modales
+  // Modals
   const { isOpen, onOpen, onClose } = useDisclosure();
   const {
     isOpen: isLineupOpen,
@@ -48,344 +79,184 @@ export default function MyTeamPage() {
     onClose: onLineupClose,
   } = useDisclosure();
 
-  // Id del usuario actual (hardcode por ahora)
-  const myParticipantId = 8;
   const { history: cumulativeRankHistory, loading: loadingCumulativeRank } =
     useCumulativeRankHistory(myParticipantId);
 
-  // 📌 Cargar jugadores y formación persistente
-  useEffect(() => {
-    fetchTeamAndPlayers();
-  }, []);
-
-  const fetchTeamAndPlayers = async () => {
-    try {
-      const teamId = myParticipantId;
-
-      // Obtener formación
-      const teamRes = await fetch(`http://localhost:4000/api/participants/${teamId}`);
-      if (teamRes.ok) {
-        const teamData = await teamRes.json();
-        if (teamData.formation) setFormation(teamData.formation);
-      }
-
-      // Obtener plantilla (participant_players)
-      const res = await fetch(`/api/participant-players/${teamId}/team`);
-      if (!res.ok) {
-        console.warn("⚠️ No se encontraron jugadores:", res.status);
-        setMyPlayers([]);
-        return;
-      }
-      const data = await res.json();
-      setMyPlayers(Array.isArray(data) ? data : []);
-      // Actualizar timers de lock
-      const timers = {};
-      (Array.isArray(data) ? data : []).forEach((pl) => {
-        if (pl.clause_lock_until && !pl.is_clausulable) {
-          timers[pl.player_id] = new Date(pl.clause_lock_until).getTime();
-        }
-      });
-  // setLockTimers eliminado: ya no se usa estado para timers
-    } catch (err) {
-      console.error("❌ Error cargando plantilla o formación:", err);
-      setMyPlayers([]);
-    }
-  };
-
-  // Forzar re-render cada segundo para actualizar los timers en pantalla
   useEffect(() => {
     const interval = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(interval);
   }, []);
-// Helper para mostrar ms como HH:MM:SS
-function msToHMS(ms) {
-  const totalSec = Math.floor(ms / 1000);
-  const d = Math.floor(totalSec / 86400);
-  const h = Math.floor((totalSec % 86400) / 3600);
-  const m = Math.floor((totalSec % 3600) / 60);
-  const s = totalSec % 60;
-  let str = '';
-  if (d > 0) str += `${d}d `;
-  str += [h, m, s].map((v) => v.toString().padStart(2, '0')).join(':');
-  return str;
-}
-  useEffect(() => {
-    async function fetchMoney() {
-      try {
-        const res = await fetch(
-          `http://localhost:4000/api/participants/${myParticipantId}/money`
-        );
-        if (res.ok) {
-          const data = await res.json();
-          setMoney(data.money);
-        } else {
-          setMoney(null);
-        }
-      } catch {
-        setMoney(null);
-      }
+
+  const handleSaveMoney = useCallback(async () => {
+    const ok = await saveMoney(moneyEdit.value);
+    if (ok) {
+      setMoneyEdit({ open: false, value: '' });
+      setAnnounceMsg(`Dinero actualizado a ${moneyEdit.value} euros`);
     }
-    fetchMoney();
-  }, [myParticipantId]);
+  }, [moneyEdit.value, saveMoney]);
 
-  // Guardar dinero editado
-  const handleSaveMoney = async () => {
-    const newMoney = Number(moneyEdit.value);
-    if (isNaN(newMoney)) return;
-    try {
-      const res = await fetch(`http://localhost:4000/api/participants/${myParticipantId}/money`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ money: newMoney })
-      });
-      if (res.ok) {
-        setMoney(newMoney);
-        setMoneyEdit({ open: false, value: '' });
-      }
-    } catch {
-      // Error updating money, ignored
+  const handleAddPlayer = async (player) => { await addPlayer(player); onClose(); };
+  const handleSetXI = async (player) => { await setXI(player, selectedSlot); onLineupClose(); };
+  const handleRemovePlayer = async (playerId) => { await removePlayer(playerId); };
+  const handleFormationChange = (e) => { changeFormation(e.target.value); setAnnounceMsg(`Formación cambiada a ${e.target.value}`); };
+
+  // value flash detection
+  useEffect(()=> { prevMoney.current = money; }, [money]);
+  useEffect(()=> {
+    if(prevValueXI.current !== null && totalMarketValueXI !== prevValueXI.current){
+      setFlashValueXI(true); setTimeout(()=> setFlashValueXI(false), 650);
     }
-  };
+    prevValueXI.current = totalMarketValueXI;
+  }, [totalMarketValueXI]);
 
-  // Ordenar jugadores
-  const orderedPlayers = [...myPlayers].sort((a, b) => {
-    const posOrder = { GK: 1, DEF: 2, MID: 3, FWD: 4 };
-    if (posOrder[a.role] !== posOrder[b.role]) {
-      return posOrder[a.role] - posOrder[b.role];
+  // Restore focus when closing modals
+  useEffect(()=> {
+    if(!moneyEdit.open && !clauseEdit.open && !isOpen && !isLineupOpen && lastFocusedRef.current){
+  try { lastFocusedRef.current.focus(); } catch { /* ignore focus errors */ }
     }
-    return (b.total_points || 0) - (a.total_points || 0);
-  });
+  }, [moneyEdit.open, clauseEdit.open, isOpen, isLineupOpen]);
 
-  const positions = FORMATION_MAP[formation];
-
-  // ➕ Añadir jugador
-  const handleAddPlayer = async (player) => {
-    try {
-      const teamId = myParticipantId;
-      if (myPlayers.some((pl) => pl.player_id === player.id)) {
-        console.warn("⚠️ El jugador ya está en tu plantilla");
-        return;
-      }
-
-      const res = await fetch(`/api/participant-players/${teamId}/team`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          player_id: player.id,
-          buy_price: player.market_value_num || 0,
-          status: "R",
-          slot_index: null,
-        }),
-      });
-      if (!res.ok) throw new Error("Error al añadir jugador");
-
-      await fetchTeamAndPlayers();
-      onClose();
-    } catch (err) {
-      console.error("❌ Error añadiendo jugador:", err);
-    }
-  };
-
-  // ⚽ Asignar jugador al XI
-  const handleSetXI = async (player) => {
-    try {
-      const teamId = myParticipantId;
-      if (!selectedSlot) return;
-
-      // Buscar si ya hay jugador en el slot (XI o banquillo)
-      const prevPlayer = myPlayers.find(
-        (pl) =>
-          pl.slot_index === selectedSlot.index &&
-          pl.status === (selectedSlot.isBench ? "B" : "XI")
-      );
-      if (prevPlayer) {
-        await fetch(`/api/participant-players/${teamId}/team/${prevPlayer.player_id}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ status: "R", slot_index: null }),
-        });
-      }
-
-      // Asignar jugador al slot correcto (XI o banquillo con su slot_index)
-      await fetch(`/api/participant-players/${teamId}/team/${player.player_id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          status: selectedSlot.isBench ? "B" : "XI",
-          slot_index: selectedSlot.index,
-        }),
-      });
-
-      await fetchTeamAndPlayers();
-      onLineupClose();
-    } catch (err) {
-      console.error("❌ Error actualizando status:", err);
-    }
-  };
-
-  // ❌ Eliminar jugador
-  const handleRemovePlayer = async (playerId) => {
-    try {
-      const teamId = myParticipantId;
-      const res = await fetch(`/api/participant-players/${teamId}/team/${playerId}`, {
-        method: "DELETE",
-      });
-      if (!res.ok) throw new Error("Error al eliminar jugador");
-      await fetchTeamAndPlayers();
-    } catch (err) {
-      console.error("❌ Error eliminando jugador:", err);
-    }
-  };
-
-  // 🔄 Cambiar formación
-  const handleFormationChange = async (e) => {
-    const newFormation = e.target.value;
-    setFormation(newFormation);
-    try {
-      await fetch(
-        `http://localhost:4000/api/participants/${myParticipantId}/formation`,
-        {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ formation: newFormation }),
-        }
-      );
-    } catch (err) {
-      console.warn("No se pudo actualizar la formación:", err);
-    }
-
-    // Ajustar XI y reservas
-    const newPositions = FORMATION_MAP[newFormation];
-    const slotsByRole = {};
-    newPositions.forEach((p, i) => {
-      if (!slotsByRole[p.role]) slotsByRole[p.role] = [];
-      slotsByRole[p.role].push(i + 1);
-    });
-
-    const xiByRole = {};
-    myPlayers.filter((pl) => pl.status === "XI").forEach((pl) => {
-      if (!xiByRole[pl.role]) xiByRole[pl.role] = [];
-      xiByRole[pl.role].push(pl);
-    });
-
-    const updates = [];
-    Object.entries(slotsByRole).forEach(([role, slotIndexes]) => {
-      const players = xiByRole[role] || [];
-      const sorted = [...players].sort((a, b) => (a.slot_index || 0) - (b.slot_index || 0));
-      for (let i = 0; i < sorted.length; i++) {
-        const pl = sorted[i];
-        if (i < slotIndexes.length) {
-          updates.push(
-            fetch(`/api/participant-players/${myParticipantId}/team/${pl.player_id}`, {
-              method: "PUT",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ status: "XI", slot_index: slotIndexes[i] }),
-            })
-          );
-        } else {
-          updates.push(
-            fetch(`/api/participant-players/${myParticipantId}/team/${pl.player_id}`, {
-              method: "PUT",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ status: "R", slot_index: null }),
-            })
-          );
-        }
-      }
-    });
-
-    Object.keys(xiByRole).forEach((role) => {
-      if (!slotsByRole[role]) {
-        xiByRole[role].forEach((pl) => {
-          updates.push(
-            fetch(`/api/participant-players/${myParticipantId}/team/${pl.player_id}`, {
-              method: "PUT",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ status: "R", slot_index: null }),
-            })
-          );
-        });
-      }
-    });
-
-    await Promise.all(updates);
-    await fetchTeamAndPlayers();
-  };
-
-    // Calcular valor de mercado XI
-  const totalMarketValueXI = myPlayers
-    .filter((pl) => pl.status === "XI")
-    .reduce((sum, pl) => sum + (pl.market_value_num || 0), 0);
+  const kpiBg = useColorModeValue('white','whiteAlpha.100');
+  const kpiMuted = useColorModeValue('gray.600','gray.400');
+  const skeletonRowBg = useColorModeValue('white','gray.700');
 
   return (
-    <Box p={6}>
-      <Flex align="center" mb={4} gap={6}>
-        <Flex align="center" gap={2}>
-          <Box as="span" fontSize="2xl" color="blue.400">
-            <span role="img" aria-label="fútbol">⚽</span>
-          </Box>
-          <Text fontSize="2xl" fontWeight="bold">Mi Equipo Fantasy</Text>
-        </Flex>
-        <Box
-          bg="blue.50"
-          px={4}
-          py={1}
-          borderRadius="md"
-          boxShadow="sm"
-          display="flex"
-          alignItems="center"
-          gap={2}
-        >
-          <InfoOutlineIcon color="blue.400" />
-          <Text fontSize="md" color="blue.800" fontWeight="semibold">Valor XI:</Text>
-          <Text fontSize="lg" color="blue.700" fontWeight="bold">
-            €{totalMarketValueXI.toLocaleString("es-ES")}
-          </Text>
-        </Box>
-      </Flex>
+    <Box p={{ base:4, md:6 }}>
+      {/* Header */}
+      <Grid templateColumns={{ base:'1fr', lg:'repeat(12, 1fr)' }} gap={4} mb={4} as="header">
+        <GridItem colSpan={{ base:12, lg:12 }}>
+          <Flex align="center" gap={3} wrap='wrap'>
+            <HStack spacing={2}>
+              <Box as="span" fontSize="2xl" color="brand.400">
+                <span role="img" aria-label="fútbol">⚽</span>
+              </Box>
+              <Text fontSize="2xl" fontWeight="bold">Mi Equipo Fantasy</Text>
+            </HStack>
+            <HStack spacing={3} flexWrap='wrap'>
+              <Box
+                as={motion.div}
+                whileHover={{ y:-3, boxShadow:'0 6px 14px -4px rgba(0,0,0,0.25)' }}
+                px={4} py={2} bg={kpiBg} borderRadius='lg' minW='150px'
+                position='relative' overflow='hidden'
+                _before={{ content:'""', position:'absolute', inset:0, bgGradient:'linear(to-br, brand.500, brand.600)', opacity:0.12 }}
+                animate={flashValueXI ? { boxShadow:['0 0 0 0 rgba(234,179,8,0.0)','0 0 0 6px rgba(234,179,8,0.45)','0 0 0 0 rgba(234,179,8,0.0)'] } : {}}
+                transition={{ duration:0.7 }}
+              >
+                <Stat>
+                  <StatLabel fontSize='xs' textTransform='uppercase' color={kpiMuted} letterSpacing='widest'>Valor XI</StatLabel>
+                  <StatNumber fontSize='md'>
+                    {loadingPlayers ? <Skeleton height='16px' width='80px' /> : `€${totalMarketValueXI.toLocaleString('es-ES')}`}
+                  </StatNumber>
+                </Stat>
+              </Box>
+              <MoneyPanel
+                variant='inline'
+                sticky={false}
+                money={money}
+                onEdit={() => setMoneyEdit({ open:true, value: money })}
+              />
+              <HStack spacing={2}>
+                <Text fontSize='sm' fontWeight='semibold'>Formación</Text>
+                <Select size='sm' value={formation} onChange={handleFormationChange} maxW='120px'>
+                  {FORMATIONS.map(f => <option key={f} value={f}>{f}</option>)}
+                </Select>
+              </HStack>
+              <Button colorScheme='brand' size='sm' variant='solid' onClick={(e)=> { lastFocusedRef.current = e.currentTarget; setMoneyEdit({ open:true, value: money }); }}>Editar dinero</Button>
+              <Button size='sm' variant='outline' onClick={() => {/* future save action placeholder */}}>Guardar cambios</Button>
+              <Button size='sm' variant='ghost' onClick={(e)=> { lastFocusedRef.current = e.currentTarget; onOpen(); }}>+ Jugador</Button>
+            </HStack>
+          </Flex>
+        </GridItem>
+      </Grid>
 
-      {/* Gráfica + dinero + log */}
-      <Flex direction={{ base: "column", md: "row" }} gap={6} mb={8} align="stretch">
-        <Box flex={2.5} minW={0}>
-          {loadingCumulativeRank ? (
-            <Flex justify="center" align="center" h="120px">
-              <Spinner />
-            </Flex>
-          ) : (
-            <>
-              <CumulativeRankChart history={cumulativeRankHistory} />
-              <Flex justify="center" mt={4}>
-                <Box
-                  bg="yellow.200"
-                  px={12}
-                  py={3}
-                  borderRadius="xl"
-                  boxShadow="lg"
-                  display="flex"
-                  alignItems="center"
-                  gap={6}
-                  minW="360px"
-                  maxW="500px"
-                  justifyContent="center"
-                >
-                  <Text fontSize="2xl" color="yellow.900" fontWeight="extrabold">
-                    Dinero actual
-                  </Text>
-                  <Flex align="center" gap={2}>
-                    <Text fontSize="4xl" color="yellow.700" fontWeight="black" ml={4}>
-                      {money === null
-                        ? <Spinner size="md" />
-                        : `€${Number(money).toLocaleString("es-ES")}`}
-                    </Text>
-                    {money !== null && (
-                      <Button size="xs" variant="ghost" onClick={() => setMoneyEdit({ open: true, value: money })}>
-                        <EditIcon color="yellow.700" />
-                      </Button>
-                    )}
-                  </Flex>
-                </Box>
-              </Flex>
-      {/* Modal editar dinero */}
+      {/* Main Grid */}
+      <Grid templateColumns={{ base:'1fr', lg:'repeat(12, 1fr)' }} gap={6} alignItems='start'>
+        <GridItem colSpan={{ base:12, lg:7 }}>
+          <Box mb={4}>
+            <Pitch
+              positions={positions}
+              players={myPlayers}
+              onSelectSlot={(slotInfo)=> { setSelectedSlot(slotInfo); onLineupOpen(); }}
+            />
+            <BenchArea
+              players={myPlayers}
+              onSelectBench={(slot)=> { setSelectedSlot(slot); onLineupOpen(); }}
+            />
+          </Box>
+        </GridItem>
+        <GridItem colSpan={{ base:12, lg:5 }}>
+          <VStack
+            as={motion.div}
+            initial={{ opacity:0, x:24 }}
+            animate={{ opacity:1, x:0 }}
+            transition={{ duration:0.45, ease:'easeOut' }}
+            spacing={4} align='stretch' p={4} borderRadius='xl' boxShadow='lg'
+            bgGradient={useColorModeValue('linear(to-br, white, blue.50)','linear(to-br, gray.900, blue.900)')}
+            h={{ lg:'calc(100vh - 180px)' }} overflow='hidden' position='relative'
+            _before={{ content:'""', position:'absolute', inset:0, borderRadius:'inherit', pointerEvents:'none', boxShadow:'inset 0 0 0 1px rgba(255,255,255,0.08)', opacity:0.9 }}
+            _after={{ content:'""', position:'absolute', inset:0, borderRadius:'inherit', pointerEvents:'none', bgGradient:'radial(at top left, rgba(30,168,255,0.18), transparent 60%)' }}
+          >
+            {/* MoneyPanel eliminado del panel lateral para evitar superposición sobre pestañas */}
+            <Tabs variant='enclosed' colorScheme='brand' isLazy display='flex' flexDir='column' flex='1' h='100%' aria-label='Panel de datos del equipo' position='relative'>
+              <TabList>
+                <Tab fontSize='sm' _selected={{ bg:'brand.500', color:'white' }}>Roster</Tab>
+                <Tab fontSize='sm' _selected={{ bg:'brand.500', color:'white' }}>Log</Tab>
+                <Tab fontSize='sm' _selected={{ bg:'brand.500', color:'white' }}>Gráfica</Tab>
+              </TabList>
+              <TabPanels flex='1' overflow='hidden' position='relative'>
+                <TabPanel px={0} h='100%' overflow='auto' as={motion.div} key='roster' initial={{opacity:0, y:8}} animate={{opacity:1, y:0}} transition={{duration:0.25}}>
+                  {loadingPlayers ? (
+                    <VStack align='stretch' spacing={3}>
+                      {Array.from({ length:5 }).map((_,i)=> (
+                        <HStack key={i} p={3} borderRadius='lg' bg={skeletonRowBg} boxShadow='xs'>
+                          <SkeletonCircle size='8' />
+                          <VStack flex={1} spacing={2} align='stretch'>
+                            <Skeleton height='14px' />
+                            <Skeleton height='10px' width='60%' />
+                          </VStack>
+                          <Skeleton height='24px' width='70px' />
+                        </HStack>
+                      ))}
+                    </VStack>
+                  ) : (
+                    <PlayerRoster
+                      players={orderedPlayers}
+                      onRemove={handleRemovePlayer}
+                      onSetReserve={setReserve}
+                      onEditClause={(pl, baseForm)=> {
+                        let lock_days=0, lock_hours=0;
+                        if(pl.clause_lock_until && !pl.is_clausulable){
+                          const now = Date.now();
+                          const until = new Date(pl.clause_lock_until).getTime();
+                          const diffMs = Math.max(0, until-now);
+                          lock_days = Math.floor(diffMs / (1000*60*60*24));
+                          lock_hours = Math.floor((diffMs % (1000*60*60*24)) / (1000*60*60));
+                        }
+                        setClauseEdit({ open:true, player: pl });
+                        setClauseForm({ ...baseForm, lock_days, lock_hours });
+                      }}
+                      clauseHighlightId={lastClauseUpdated}
+                    />
+                  )}
+                  <Button mt={4} size='sm' colorScheme='brand' onClick={onOpen}>+ Añadir jugador</Button>
+                </TabPanel>
+                <TabPanel px={0} h='100%' overflow='auto' as={motion.div} key='log' initial={{opacity:0, y:8}} animate={{opacity:1, y:0}} transition={{duration:0.25}}>
+                  <PlayerTransferLog refreshKey={refreshKey} participantId={myParticipantId} />
+                </TabPanel>
+                <TabPanel px={0} h='100%' overflow='auto' as={motion.div} key='chart' initial={{opacity:0, y:8}} animate={{opacity:1, y:0}} transition={{duration:0.25}}>
+                  {loadingCumulativeRank ? (
+                    <Flex justify='center' py={6}><Spinner /></Flex>
+                  ) : (
+                    <CumulativeRankChart history={cumulativeRankHistory} compact />
+                  )}
+                </TabPanel>
+              </TabPanels>
+            </Tabs>
+          </VStack>
+        </GridItem>
+      </Grid>
+
+      {/* Modals */}
       <Modal isOpen={moneyEdit.open} onClose={() => setMoneyEdit({ open: false, value: '' })} size="sm">
         <ModalOverlay />
         <ModalContent>
@@ -408,264 +279,7 @@ function msToHMS(ms) {
           </ModalBody>
         </ModalContent>
       </Modal>
-            </>
-          )}
-        </Box>
 
-        <Box flex={1} minW="420px" maxW="520px">
-          {/* Log individual: solo traspasos donde participa el usuario */}
-          <PlayerTransferLog refreshKey={refreshKey} participantId={myParticipantId} />
-        </Box>
-      </Flex>
-
-      {/* Selector de formación */}
-      <Flex mb={6} align="center" gap={3}>
-        <Text fontWeight="semibold">Formación:</Text>
-        <Select value={formation} onChange={handleFormationChange} maxW="200px">
-          {FORMATIONS.map((f) => (
-            <option key={f} value={f}>{f}</option>
-          ))}
-        </Select>
-      </Flex>
-
-      <Flex gap={8}>
-        {/* Campo */}
-        <Box flex="1">
-          <Box
-            bg="green.700"
-            borderRadius="lg"
-            p={2}
-            h="600px"
-            position="relative"
-            boxShadow="md"
-          >
-            {positions.map((p, i) => {
-              const playerForSlot = myPlayers.find(
-                (pl) => pl.status === "XI" && pl.slot_index === i + 1
-              );
-              return (
-                <PlayerSlot
-                  key={i}
-                  role={p.role}
-                  x={p.x}
-                  y={p.y}
-                  index={i + 1}
-                  player={playerForSlot}
-                  onSelectSlot={() => {
-                    setSelectedSlot({ ...p, index: i + 1 });
-                    onLineupOpen();
-                  }}
-                />
-              );
-            })}
-          </Box>
-
-          {/* Banquillo + Coach */}
-          <HStack mt={6} spacing={12} align="flex-start" justify="center">
-            <VStack spacing={2} minW="340px">
-              <Text fontWeight="bold" fontSize="md" color="orange.600" mb={1}>Banquillo</Text>
-              <HStack justify="flex-start" spacing={4}>
-                {Array.from({ length: 4 }).map((_, i) => {
-                  const playerForBench = myPlayers.find(
-                    (pl) => pl.status === "B" && pl.slot_index === i + 1
-                  ) || null;
-                  return (
-                    <PlayerSlot
-                      key={i}
-                      role="B"
-                      index={i + 1}
-                      isBench
-                      player={playerForBench}
-                      onSelectSlot={() => {
-                        setSelectedSlot({ role: "B", index: i + 1, isBench: true });
-                        onLineupOpen();
-                      }}
-                    />
-                  );
-                })}
-              </HStack>
-            </VStack>
-            <VStack spacing={2} minW="100px">
-              <Text fontWeight="bold" fontSize="md" color="purple.600" mb={1}>Coach</Text>
-              <Center><PlayerSlot role="Coach" isBench /></Center>
-            </VStack>
-          </HStack>
-        </Box>
-
-        {/* Lista de jugadores */}
-        <Box flex="1" p={4} bg="gray.50" borderRadius="md" boxShadow="sm">
-          <Flex justify="space-between" align="center" mb={3}>
-            <Text fontWeight="bold">📋 Mi plantilla</Text>
-            <Button colorScheme="blue" size="sm" onClick={onOpen}>+ Añadir jugador</Button>
-          </Flex>
-
-          {orderedPlayers.length === 0 ? (
-            <Text color="gray.500">No tienes jugadores todavía</Text>
-          ) : (
-            <VStack align="stretch" spacing={2}>
-              {orderedPlayers.map((pl) => {
-                let statusLabel = "Reserva";
-                let statusColor = "gray.500";
-                if (pl.status === "XI") { statusLabel = "XI"; statusColor = "green.600"; }
-                else if (pl.status === "B") { statusLabel = "Banquillo"; statusColor = "orange.500"; }
-                else if (pl.status === "R") { statusLabel = "Reserva"; statusColor = "gray.500"; }
-
-                // Calcular tiempo restante de lock
-                let lockMs = 0;
-                if (pl.clause_lock_until && !pl.is_clausulable) {
-                  lockMs = Math.max(0, new Date(pl.clause_lock_until).getTime() - Date.now());
-                }
-                const lockStr = lockMs > 0 ? msToHMS(lockMs) : null;
-                const minClause = pl.market_value_num || 0;
-
-                // Mover cláusula y lápiz entre valor de mercado y puntos
-                return (
-                  <HStack
-                    key={pl.player_id}
-                    justify="space-between"
-                    p={2}
-                    borderRadius="md"
-                    bg="white"
-                    boxShadow="xs"
-                  >
-                    <Box>
-                      <Link to={`/players/${pl.player_id}`} style={{ color: "teal", fontWeight: "bold" }}>
-                        {pl.name}
-                      </Link>
-                      <Text fontSize="sm" color="gray.600">
-                        {pl.team_name} · {pl.position}
-                      </Text>
-                    </Box>
-                    <HStack>
-                      <Text
-                        color={statusColor}
-                        fontWeight="bold"
-                        fontSize="sm"
-                        borderWidth="1px"
-                        borderColor={statusColor}
-                        borderRadius="md"
-                        px={2}
-                        py={0.5}
-                      >
-                        {statusLabel}
-                      </Text>
-                      <Text color="blue.600">
-                        €{(pl.market_value_num || 0).toLocaleString("es-ES")}
-                      </Text>
-                      {/* Switch visual: lock o cláusula, con lápiz siempre */}
-                      <HStack spacing={1}>
-                        <Box
-                          px={3}
-                          py={1}
-                          borderRadius="full"
-                          bg={lockStr ? "purple.100" : "purple.50"}
-                          borderWidth={lockStr ? "2px" : "1px"}
-                          borderColor={lockStr ? "purple.400" : "purple.200"}
-                          display="flex"
-                          alignItems="center"
-                          minW="80px"
-                          justifyContent="center"
-                        >
-                          {lockStr ? (
-                            <Text color="purple.600" fontWeight="bold" fontSize="sm">{lockStr}</Text>
-                          ) : (
-                            <Text color="purple.700" fontWeight="bold" fontSize="sm">
-                              €{(pl.clause_value || minClause).toLocaleString("es-ES")}
-                            </Text>
-                          )}
-                        </Box>
-                        <Button size="xs" variant="ghost" ml={0} onClick={() => {
-                          // Calcular días y horas actuales de lock
-                          let lock_days = 0, lock_hours = 0;
-                          if (pl.clause_lock_until && !pl.is_clausulable) {
-                            const now = Date.now();
-                            const until = new Date(pl.clause_lock_until).getTime();
-                            let diffMs = Math.max(0, until - now);
-                            lock_days = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-                            lock_hours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-                          }
-                          setClauseEdit({ open: true, player: pl });
-                          setClauseForm({
-                            clause_value: pl.clause_value || minClause,
-                            is_clausulable: !!pl.is_clausulable,
-                            lock_days,
-                            lock_hours
-                          });
-                        }}>
-                          <span role="img" aria-label="Editar">✏️</span>
-                        </Button>
-                      </HStack>
-                      <Text color={pl.total_points < 0 ? "red.500" : "green.600"}>
-                        {pl.total_points} pts
-                      </Text>
-                      <Button
-                        colorScheme="red"
-                        size="xs"
-                        onClick={() => handleRemovePlayer(pl.player_id)}
-                      >
-                        Eliminar
-                      </Button>
-                      <Button
-                        colorScheme="yellow"
-                        size="xs"
-                        variant="outline"
-                        onClick={async () => {
-                          const teamId = 8;
-                          await fetch(`/api/participant-players/${teamId}/team/${pl.player_id}`, {
-                            method: "PUT",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ status: "R", slot_index: null }),
-                          });
-                          await fetchTeamAndPlayers();
-                        }}
-                        isDisabled={pl.status === "R"}
-                      >
-                        Mandar a reserva
-                      </Button>
-                    </HStack>
-                  </HStack>
-                );
-              })}
-      <ClauseLockModal
-        isOpen={clauseEdit.open}
-        onClose={() => setClauseEdit({ open: false, player: null })}
-        player={clauseEdit.player}
-        clauseForm={clauseForm}
-        setClauseForm={setClauseForm}
-        onSave={async () => {
-          const teamId = 8;
-          const { clause_value, is_clausulable, lock_days, lock_hours } = clauseForm;
-          const playerId = clauseEdit.player.player_id;
-          // Actualizar valor de cláusula
-          await fetch(`/api/participant-players/${teamId}/team/${playerId}/clause`, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ clause_value: Math.max(Number(clause_value), clauseEdit.player.market_value_num || 0) }),
-          });
-          // Actualizar clausulabilidad
-          await fetch(`/api/participant-players/${teamId}/team/${playerId}/clausulable`, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ is_clausulable: is_clausulable ? 1 : 0 }),
-          });
-          // Si no es clausulable, actualizar lock
-          if (!is_clausulable) {
-            await fetch(`/api/participant-players/${teamId}/team/${playerId}/clause-lock`, {
-              method: "PATCH",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ days: Number(lock_days) || 0, hours: Number(lock_hours) || 0 }),
-            });
-          }
-          setClauseEdit({ open: false, player: null });
-          await fetchTeamAndPlayers();
-        }}
-      />
-            </VStack>
-          )}
-        </Box>
-      </Flex>
-
-      {/* Modal búsqueda */}
       <Modal isOpen={isOpen} onClose={onClose} size="xl">
         <ModalOverlay />
         <ModalContent>
@@ -675,8 +289,7 @@ function msToHMS(ms) {
         </ModalContent>
       </Modal>
 
-      {/* Modal asignar jugador a slot */}
-      <Modal isOpen={isLineupOpen} onClose={onLineupClose} size="lg">
+      <Modal isOpen={isLineupOpen} onClose={onLineupClose} size="lg" initialFocusRef={undefined}>
         <ModalOverlay />
         <ModalContent>
           <ModalHeader>Elige jugador para {selectedSlot?.role}</ModalHeader>
@@ -710,80 +323,28 @@ function msToHMS(ms) {
           </ModalBody>
         </ModalContent>
       </Modal>
+
+      <ClauseLockModal
+        isOpen={clauseEdit.open}
+        onClose={() => setClauseEdit({ open: false, player: null })}
+        player={clauseEdit.player}
+        clauseForm={clauseForm}
+        setClauseForm={setClauseForm}
+        onSave={async () => {
+          const { clause_value, is_clausulable, lock_days, lock_hours } = clauseForm;
+          const playerId = clauseEdit.player.player_id;
+          await updateClause({ playerId, clause_value, is_clausulable, lock_days, lock_hours, minClause: clauseEdit.player.market_value_num || 0 });
+          setClauseEdit({ open:false, player:null });
+          setLastClauseUpdated(playerId);
+          setAnnounceMsg(`Cláusula actualizada para ${clauseEdit.player.name}`);
+          setTimeout(()=> setLastClauseUpdated(null), 1500);
+        }}
+      />
+      <VisuallyHidden aria-live='polite'>{announceMsg}</VisuallyHidden>
     </Box>
   );
 }
 
-// Helpers
-function getShortName(name = "") {
-  if (!name) return "";
-  const parts = name.split(" ");
-  if (parts.length === 1) return parts[0];
-  if (parts[0].length <= 4) return parts[0] + " " + parts[1][0] + ".";
-  return parts[0][0] + ". " + parts[1];
-}
-
-function getRoleColor(role) {
-  switch (role) {
-    case "GK": return "#3182ce";
-    case "DEF": return "#38a169";
-    case "MID": return "#d69e2e";
-    case "FWD": return "#e53e3e";
-    default: return "gray.400";
-  }
-}
-
-function PlayerSlot({ role, index, x, y, player, isBench, onSelectSlot }) {
-  const bg = isBench ? "gray.200" : player ? "white" : "yellow.100";
-  const borderColor = isBench ? "gray.300" : player ? getRoleColor(role) : "yellow.400";
-  const fontSize = player ? "sm" : "xs";
-  const fontWeight = player ? "semibold" : "bold";
-  const shadow = isBench ? undefined : "0 2px 8px 0 #0002";
-  const shortName = player ? getShortName(player.name) : `${role}${index || ""}`;
-  const tooltipLabel = player
-    ? `${player.name}${player.team_name ? "\n" + player.team_name : ""}`
-    : `¡Plaza vacía! Pulsa para asignar un ${role}`;
-
-  return (
-    <Tooltip label={tooltipLabel} hasArrow placement="top" fontSize="sm">
-      <Center
-        w="70px"
-        h="70px"
-        bg={bg}
-        borderRadius="full"
-        borderWidth="2px"
-        borderColor={borderColor}
-        fontSize={fontSize}
-        fontWeight={fontWeight}
-        color="gray.800"
-        position={isBench ? "static" : "absolute"}
-        left={isBench ? undefined : `${x}%`}
-        top={isBench ? undefined : `${y}%`}
-        transform={isBench ? undefined : "translate(-50%, -50%)"}
-        cursor="pointer"
-        _hover={{
-          bg: player ? "gray.100" : "yellow.200",
-          boxShadow: "0 0 0 4px #ecc94b55",
-        }}
-        boxShadow={shadow}
-        transition="all 0.15s"
-        onClick={onSelectSlot}
-        textAlign="center"
-        px={1}
-        lineHeight={1.1}
-        whiteSpace="pre-line"
-      >
-        {player ? (
-          shortName
-        ) : (
-          <VStack spacing={0}>
-            <WarningTwoIcon color="yellow.500" boxSize={6} />
-            <Text fontSize="xs" color="yellow.700" fontWeight="bold">Vacío</Text>
-          </VStack>
-        )}
-      </Center>
-    </Tooltip>
-  );
-}
+// Helpers & PlayerSlot moved to components/myteam
 
 

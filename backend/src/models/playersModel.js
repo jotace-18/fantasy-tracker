@@ -254,10 +254,20 @@ const findPlayerById = (id) => {
         t.name AS team_name,
         t.id AS team_id,
         IFNULL(SUM(pp.points), 0) AS total_points,
-        ROUND(AVG(pp.points), 2) AS avg_points
+        ROUND(AVG(pp.points), 2) AS avg_points,
+        -- Ownership / clause
+        ppown.participant_id AS owner_id,
+        part.name AS owner_name,
+        ppown.clause_value,
+        ppown.is_clausulable,
+        ppown.clause_lock_until,
+        CASE WHEN m.id IS NULL THEN 0 ELSE 1 END AS on_market
       FROM players p
       LEFT JOIN teams t ON p.team_id = t.id
       LEFT JOIN player_points pp ON p.id = pp.player_id
+      LEFT JOIN participant_players ppown ON ppown.player_id = p.id
+      LEFT JOIN participants part ON part.id = ppown.participant_id
+      LEFT JOIN market m ON m.player_id = p.id
       WHERE p.id = ?
       GROUP BY p.id
     `;
@@ -265,6 +275,10 @@ const findPlayerById = (id) => {
     db.get(query, [id], (err, player) => {
       if (err) return reject(err);
       if (!player) return resolve(null);
+
+      // Normalizar flags
+      player.is_clausulable = player.is_clausulable == null ? 1 : Number(player.is_clausulable);
+      player.on_market = Number(player.on_market) === 1;
 
       // Histórico de mercado
       db.all(
@@ -288,8 +302,6 @@ const findPlayerById = (id) => {
 
               resolve({
                 ...player,
-                titular_next_jor: player.titular_next_jor,
-                lesionado: player.lesionado,
                 market: {
                   current: player.market_value,
                   delta: player.market_delta,
@@ -302,6 +314,11 @@ const findPlayerById = (id) => {
                   avg: player.avg_points,
                   history: pointsHistory,
                 },
+                clause_value: player.clause_value,
+                is_clausulable: player.is_clausulable,
+                clause_lock_until: player.clause_lock_until,
+                owner_name: player.owner_name,
+                on_market: player.on_market,
               });
             }
           );
@@ -325,46 +342,65 @@ const findPlayerById = (id) => {
  */
 function searchPlayers({ name, teamId, sort, order, limit, offset }) {
   return new Promise((resolve, reject) => {
+    // Map sort to safe SQL expressions
+    let sortExpr = 'total_points';
+    switch (sort) {
+      case 'name': sortExpr = 'b.name COLLATE NOCASE'; break;
+      case 'team_name': sortExpr = 'b.team_name COLLATE NOCASE'; break;
+      case 'position': sortExpr = 'b.position COLLATE NOCASE'; break;
+      case 'market_value': sortExpr = 'market_value_num'; break;
+      case 'total_points': default: sortExpr = 'total_points';
+    }
     let sql = `
-      SELECT 
-        p.id, 
-        p.name, 
-        p.position, 
-        p.market_value, 
-        p.market_delta,
-        p.market_max, 
-        p.market_min, 
-        p.risk_level,
-        p.team_id, 
-        t.name AS team_name,
-        CAST(REPLACE(REPLACE(p.market_value, '.', ''), ',', '') AS INTEGER) AS market_value_num
-      FROM players p
-      LEFT JOIN teams t ON p.team_id = t.id
+      WITH base AS (
+        SELECT 
+          p.id,
+          p.name,
+          p.name_normalized,
+          p.position,
+          p.market_value,
+          CAST(REPLACE(REPLACE(p.market_value, '.', ''), ',', '') AS INTEGER) AS market_value_num,
+          p.team_id,
+          t.name AS team_name
+        FROM players p
+        LEFT JOIN teams t ON p.team_id = t.id
+        WHERE 1=1
+      ), points AS (
+        SELECT player_id, IFNULL(SUM(points),0) AS total_points
+        FROM player_points
+        GROUP BY player_id
+      ), participant_owners AS (
+        SELECT pp.player_id, 'participant' AS owner_type, pp.participant_id
+        FROM participant_players pp
+      ), owners_with_name AS (
+        SELECT o.player_id, o.owner_type, o.participant_id, p.name AS participant_name
+        FROM participant_owners o
+        LEFT JOIN participants p ON p.id = o.participant_id
+      )
+      SELECT b.id, b.name, b.position, b.team_id, b.team_name,
+             b.market_value, b.market_value_num,
+             IFNULL(pt.total_points,0) AS total_points,
+             o.owner_type, o.participant_id, o.participant_name
+      FROM base b
+      LEFT JOIN points pt ON pt.player_id = b.id
+      LEFT JOIN owners_with_name o ON o.player_id = b.id
       WHERE 1=1
     `;
     const params = [];
-
-    if (name) {
-      sql += " AND p.name_normalized LIKE ?";
-      params.push(`%${name}%`);
+    if (name) { 
+      // Comparamos contra normalizado si existe y fallback a name por seguridad
+      sql += ' AND ( (b.name_normalized IS NOT NULL AND b.name_normalized LIKE ?) OR b.name LIKE ? )'; 
+      params.push(`%${name}%`, `%${name}%`); 
     }
-    if (teamId) {
-      sql += " AND p.team_id = ?";
-      params.push(teamId);
-    }
-
-    sql += ` ORDER BY p.${sort} ${order} LIMIT ? OFFSET ?`;
+    if (teamId) { sql += ' AND b.team_id = ?'; params.push(teamId); }
+    sql += ` ORDER BY ${sortExpr} ${order} LIMIT ? OFFSET ?`;
     params.push(Number(limit), Number(offset));
-
-    console.log("📝 SQL ejecutada:", sql);
-    console.log("📦 Parámetros:", params);
 
     db.all(sql, params, (err, rows) => {
       if (err) {
-        console.error("❌ Error en searchPlayers:", err.message);
-        reject(err);
+        console.error('❌ Error en searchPlayers SQL:', { msg: err.message, sqlSnippet: sql.slice(0,200) });
+        return reject(err);
       } else {
-        console.log("📊 Filas encontradas:", rows.length);
         resolve(rows || []);
       }
     });

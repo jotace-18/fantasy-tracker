@@ -1,5 +1,19 @@
-// backend/src/routes/matchResultsRoutes.js
-
+/**
+ * Match Results Routes
+ * --------------------
+ * Base path: /api/match-results
+ * CRUD de resultados de partidos por jornada.
+ *
+ * Endpoints:
+ *  POST   /api/match-results               -> create
+ *  GET    /api/match-results/jornada/:jornadaId -> findByJornada
+ *  GET    /api/match-results/:id          -> findById
+ *  PUT    /api/match-results/:id          -> update
+ *  DELETE /api/match-results/:id          -> remove
+ *
+ * Notas:
+ *  - Base para cálculo de puntos futuros, agregaciones o estadísticas.
+ */
 const express = require("express");
 const router = express.Router();
 const controller = require("../controllers/matchResultsController");

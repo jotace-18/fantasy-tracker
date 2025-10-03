@@ -1,6 +1,11 @@
-// controllers/marketController.js
+/**
+ * Market Controller
+ * -----------------
+ * CRUD de la tabla market.
+ */
 const service = require("../services/marketService");
 
+/** GET /api/market - Lista mercado. */
 function list(req, res) {
   service.list((err, rows) => {
     if (err) return res.status(500).json({ error: err.message });
@@ -8,6 +13,7 @@ function list(req, res) {
   });
 }
 
+/** POST /api/market - Inserta jugador al mercado. */
 function add(req, res) {
   const { player_id } = req.body;
   if (!player_id) return res.status(400).json({ error: "player_id es requerido" });
@@ -18,6 +24,7 @@ function add(req, res) {
   });
 }
 
+/** DELETE /api/market/:playerId - Elimina jugador del mercado. */
 function remove(req, res) {
   const { playerId } = req.params;
   service.remove(playerId, (err, result) => {
@@ -26,6 +33,7 @@ function remove(req, res) {
   });
 }
 
+/** DELETE /api/market - Vacía todo el mercado. */
 function clearAll(req, res) {
   service.clearAll((err, result) => {
     if (err) return res.status(500).json({ error: err.message });

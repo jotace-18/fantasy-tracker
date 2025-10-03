@@ -1,9 +1,14 @@
-import { Box, Heading, Text, Flex, Badge, Spinner, Divider, Button, useDisclosure, Modal, ModalOverlay, ModalContent, ModalHeader, ModalBody, ModalCloseButton, Input, VStack } from "@chakra-ui/react";
+import { Box, Heading, Text, Flex, Badge, Spinner, Divider, Button, useDisclosure, Modal, ModalOverlay, ModalContent, ModalHeader, ModalBody, ModalCloseButton, Input, VStack, useColorModeValue, Skeleton, SkeletonText, useToast } from "@chakra-ui/react";
 import { EditIcon } from "@chakra-ui/icons";
 import { useParams } from "react-router-dom";
 import PlayerSearch from "../components/PlayerSearch";
-import EditablePlayerRow from "./EditablePlayerRow";
-import { useEffect, useState } from "react";
+// Inline row component moved remains imported indirectly by SquadTable
+import ParticipantKpis from '../components/participant/ParticipantKpis';
+import MoneyModal from '../components/participant/MoneyModal';
+import ChartsPanel from '../components/participant/ChartsPanel';
+import SquadSearchBar from '../components/participant/SquadSearchBar';
+import SquadTable from '../components/participant/SquadTable';
+import { useEffect, useState, useMemo } from "react";
 import useLeaderboardPosition from "../hooks/useLeaderboardPosition";
 import PositionProgressChart from "../components/PositionProgressChart";
 import useCumulativePointsHistory from "../hooks/useCumulativePointsHistory";
@@ -22,8 +27,17 @@ export default function ParticipantProfilePage() {
   // Ordenación
   const [sortBy, setSortBy] = useState("total_points");
   const [order, setOrder] = useState("DESC");
+  const [query, setQuery] = useState("");
   // Modal editar dinero
   const [moneyEdit, setMoneyEdit] = useState({ open: false, value: "" });
+  const [liveMessage, setLiveMessage] = useState("");
+  const toast = useToast();
+
+  const cardBg = useColorModeValue('white','gray.800');
+  const sectionBg = useColorModeValue('gray.50','gray.700');
+  const kpiShadow = useColorModeValue('md','sm');
+  const tableBorderColor = useColorModeValue('gray.200','gray.600');
+  const zebraSkeletonBorder = tableBorderColor;
 
   const fetchParticipant = async () => {
     setLoading(true);
@@ -57,9 +71,14 @@ export default function ParticipantProfilePage() {
       if (res.ok) {
         setParticipant((prev) => ({ ...prev, money: newMoney }));
         setMoneyEdit({ open: false, value: "" });
+        const msg = `Dinero actualizado a €${newMoney.toLocaleString('es-ES')}`;
+        setLiveMessage(msg);
+        toast({ status:'success', description: msg, duration: 3000, position:'top-right' });
+      } else {
+        toast({ status:'error', description:'No se pudo actualizar el dinero', duration:3000 });
       }
     } catch {
-      // Error handling intentionally left blank
+      toast({ status:'error', description:'Error de red al guardar dinero', duration:3000 });
     }
   };
   useEffect(() => {
@@ -96,42 +115,48 @@ export default function ParticipantProfilePage() {
   // (debug eliminado)
 
   // Ordenar plantilla localmente
-  const getSortedSquad = () => {
+  const POSITION_ORDER = useMemo(() => [
+    'portero','defensa','centrocampista','mediocampista','delantero'
+  ], []);
+  const filteredSquad = useMemo(() => {
     if (!participant?.squad) return [];
-    const sorted = [...participant.squad];
-    const positionOrder = [
-      "portero",
-      "defensa",
-      "centrocampista",
-      "mediocampista",
-      "delantero"
-    ];
-    sorted.sort((a, b) => {
-      let vA = a[sortBy], vB = b[sortBy];
-      if (sortBy === "position") {
-        // Orden personalizado para posición
-        const idxA = positionOrder.indexOf((vA || "").toLowerCase());
-        const idxB = positionOrder.indexOf((vB || "").toLowerCase());
+    if (!query.trim()) return participant.squad;
+    const q = query.toLowerCase();
+    return participant.squad.filter(p => (
+      (p.name||'').toLowerCase().includes(q) ||
+      (p.team||'').toLowerCase().includes(q) ||
+      (p.position||'').toLowerCase().includes(q)
+    ));
+  }, [participant?.squad, query]);
+
+  const sortedSquad = useMemo(() => {
+    if (!filteredSquad) return [];
+    const arr = [...filteredSquad];
+    arr.sort((a,b) => {
+      let vA = a[sortBy];
+      let vB = b[sortBy];
+      if (sortBy === 'position') {
+        const idxA = POSITION_ORDER.indexOf((vA||'').toLowerCase());
+        const idxB = POSITION_ORDER.indexOf((vB||'').toLowerCase());
         if (idxA === -1 && idxB === -1) return 0;
-        if (idxA === -1) return order === "ASC" ? 1 : -1;
-        if (idxB === -1) return order === "ASC" ? -1 : 1;
-        return order === "ASC" ? idxA - idxB : idxB - idxA;
-      } else if (["market_value_num", "total_points", "clause_value"].includes(sortBy)) {
-        vA = Number(vA) || 0;
-        vB = Number(vB) || 0;
-        if (vA < vB) return order === "ASC" ? -1 : 1;
-        if (vA > vB) return order === "ASC" ? 1 : -1;
-        return 0;
-      } else {
-        vA = (vA || "").toString().toLowerCase();
-        vB = (vB || "").toString().toLowerCase();
-        if (vA < vB) return order === "ASC" ? -1 : 1;
-        if (vA > vB) return order === "ASC" ? 1 : -1;
+        if (idxA === -1) return order === 'ASC' ? 1 : -1;
+        if (idxB === -1) return order === 'ASC' ? -1 : 1;
+        return order === 'ASC' ? idxA - idxB : idxB - idxA;
+      }
+      if (['market_value_num','total_points','clause_value'].includes(sortBy)) {
+        vA = Number(vA)||0; vB = Number(vB)||0;
+        if (vA < vB) return order === 'ASC' ? -1 : 1;
+        if (vA > vB) return order === 'ASC' ? 1 : -1;
         return 0;
       }
+      vA = (vA||'').toString().toLowerCase();
+      vB = (vB||'').toString().toLowerCase();
+      if (vA < vB) return order === 'ASC' ? -1 : 1;
+      if (vA > vB) return order === 'ASC' ? 1 : -1;
+      return 0;
     });
-    return sorted;
-  };
+    return arr;
+  }, [filteredSquad, sortBy, order, POSITION_ORDER]);
 
   const handleSort = (field, defaultOrder = "ASC") => {
     if (sortBy === field) {
@@ -150,11 +175,50 @@ export default function ParticipantProfilePage() {
   const { history: cumulativeHistory, loading: loadingCumulative } = useCumulativePointsHistory(id);
   const { history: cumulativeRankHistory, loading: loadingCumulativeRank } = useCumulativeRankHistory(id);
 
+  // Mientras loading mostramos layout esqueletos en lugar de spinner centrado
   if (loading) {
     return (
-      <Flex justify="center" align="center" h="200px">
-        <Spinner size="xl" color="blue.500" />
-      </Flex>
+      <Box p={{ base: 2, md: 4 }} maxW="98vw" mx="auto">
+        <Flex direction={{ base: 'column', md: 'row' }} gap={6} align="flex-start">
+          <Box flex={3} minW={0} bg={cardBg} borderRadius="xl" boxShadow="lg" p={{ base:4, md:10 }}>
+            <Skeleton height="32px" mb={6} borderRadius="md" />
+            <Flex gap={6} mb={6} wrap="wrap" justify="center">
+              <Skeleton height="64px" width="150px" borderRadius="lg" />
+              <Skeleton height="64px" width="180px" borderRadius="lg" />
+              <Skeleton height="64px" width="170px" borderRadius="lg" />
+              <Skeleton height="64px" width="260px" borderRadius="lg" />
+            </Flex>
+            <Box mb={8} p={4} borderRadius="lg" bg={sectionBg} _dark={{ bg:'gray.700' }}>
+              <Flex direction={{ base:'column', md:'row' }} gap={6}>
+                <Skeleton height="120px" flex={1} borderRadius="md" />
+                <Skeleton height="120px" flex={1} borderRadius="md" />
+              </Flex>
+            </Box>
+            <Divider my={4} />
+            <Flex align="center" justify="space-between" mb={2}>
+              <Skeleton height="28px" width="180px" />
+              <Skeleton height="32px" width="120px" borderRadius="md" />
+            </Flex>
+            <Box>
+              <Box border="1px" borderColor={tableBorderColor} borderRadius="md" overflow="hidden">
+                {Array.from({ length: 8 }).map((_,i) => (
+                  <Flex key={i} px={4} py={3} gap={4} _notLast={{ borderBottom:'1px solid', borderColor: zebraSkeletonBorder }}>
+                    <Skeleton height="16px" flex={2} />
+                    <Skeleton height="16px" flex={1} />
+                    <Skeleton height="16px" flex={1} />
+                    <Skeleton height="16px" flex={1} />
+                    <Skeleton height="16px" flex={1} />
+                    <Skeleton height="16px" flex={1} />
+                  </Flex>
+                ))}
+              </Box>
+            </Box>
+          </Box>
+          <Box flex={1} minW={0}>
+            <Skeleton height="400px" borderRadius="xl" />
+          </Box>
+        </Flex>
+      </Box>
     );
   }
   if (error) {
@@ -174,108 +238,51 @@ export default function ParticipantProfilePage() {
     <Box p={{ base: 2, md: 4 }} maxW="98vw" mx="auto">
       <Flex direction={{ base: "column", md: "row" }} gap={6} align="flex-start">
         {/* Main participant card (left column) */}
-        <Box flex={3} minW={0} bg="white" borderRadius="lg" boxShadow="md" p={{ base: 4, md: 10 }}>
+        <Box flex={3} minW={0} bg={cardBg} borderRadius="xl" boxShadow="lg" p={{ base: 4, md: 10 }} transition="background .25s ease" _dark={{ borderColor: 'gray.600' }} borderWidth={{ base: '0', md: '1px' }}>
           <Heading size="lg" mb={2} textAlign="center">{participant.name}</Heading>
-          <Flex gap={6} mb={6} align="center" justify="center" wrap="wrap">
-            <Badge colorScheme="blue" fontSize="2xl" px={5} py={2} borderRadius="lg" boxShadow="md">
-              {participant.total_points} pts
-            </Badge>
-            <Flex align="center" gap={2}>
-              <Badge colorScheme="green" fontSize="2xl" px={5} py={2} borderRadius="lg" boxShadow="md">
-                €{Number(participant.money).toLocaleString("es-ES")}
-              </Badge>
-              <Button size="sm" variant="ghost" onClick={() => setMoneyEdit({ open: true, value: participant.money })}>
-                <EditIcon color="green.700" boxSize={6} />
-              </Button>
-            </Flex>
-            <Badge colorScheme="gray" fontSize="2xl" px={5} py={2} borderRadius="lg" boxShadow="md">
-              {loadingPosition
-                ? "Cargando posición..."
-                : position !== null && position !== undefined
-                  ? `Posición: ${position}`
-                  : "Sin ranking"}
-            </Badge>
-            <Badge colorScheme="purple" fontSize="2xl" px={5} py={2} borderRadius="lg" boxShadow="md">
-              Valor plantilla: {plantillaValue.toLocaleString("es-ES")} €
-            </Badge>
-          </Flex>
-      {/* Modal editar dinero */}
-      <Modal isOpen={moneyEdit.open} onClose={() => setMoneyEdit({ open: false, value: '' })} size="sm">
-        <ModalOverlay />
-        <ModalContent>
-          <ModalHeader>Editar dinero</ModalHeader>
-          <ModalCloseButton />
-          <ModalBody>
-            <VStack spacing={4} align="stretch">
-              <Text fontWeight="bold">Nuevo dinero (€):</Text>
-              <Input
-                type="number"
-                min={0}
-                value={moneyEdit.value}
-                onChange={e => setMoneyEdit(edit => ({ ...edit, value: e.target.value }))}
-                style={{ width: 180, fontSize: 18, padding: 4, border: '1px solid #CBD5E1', borderRadius: 6 }}
-              />
-              <Button colorScheme="green" onClick={handleSaveMoney}>
-                Guardar
-              </Button>
-            </VStack>
-          </ModalBody>
-        </ModalContent>
-      </Modal>
+          <ParticipantKpis
+            participant={participant}
+            plantillaValue={plantillaValue}
+            loadingPosition={loadingPosition}
+            position={position}
+            sectionBg={sectionBg}
+            kpiShadow={kpiShadow}
+            onEditMoney={() => setMoneyEdit({ open: true, value: participant.money })}
+          />
+          {/* Modal editar dinero */}
+          <MoneyModal
+            isOpen={moneyEdit.open}
+            onClose={() => setMoneyEdit({ open:false, value:'' })}
+            value={moneyEdit.value}
+            setValue={val => setMoneyEdit(m => ({ ...m, value: val }))}
+            onSave={handleSaveMoney}
+            isSaving={false}
+          />
           <Divider my={4} />
-          <Box mb={8}>
-            <Flex direction={{ base: "column", md: "row" }} gap={6}>
-              <Box flex={1} minW={0}>
-                {loadingCumulative ? (
-                  <Flex justify="center" align="center" h="120px"><Spinner /></Flex>
-                ) : (
-                  <CumulativePointsChart history={cumulativeHistory} />
-                )}
-              </Box>
-              <Box flex={1} minW={0}>
-                {loadingCumulativeRank ? (
-                  <Flex justify="center" align="center" h="120px"><Spinner /></Flex>
-                ) : (
-                  <CumulativeRankChart history={cumulativeRankHistory} />
-                )}
-              </Box>
-            </Flex>
-          </Box>
+          {/* Reemplazar contenedor charts usando sectionBg */}
+          <ChartsPanel
+            sectionBg={sectionBg}
+            loadingCumulative={loadingCumulative}
+            cumulativeHistory={cumulativeHistory}
+            loadingCumulativeRank={loadingCumulativeRank}
+            cumulativeRankHistory={cumulativeRankHistory}
+          />
           <Divider my={4} />
           <Box mt={2}>
-            <Flex align="center" justify="space-between" mb={2}>
-              <Heading size="md">Plantilla completa</Heading>
-              <Button colorScheme="teal" size="sm" onClick={onOpen}>Añadir jugador</Button>
-            </Flex>
+             <Flex align="center" justify="space-between" mb={2} gap={4} wrap="wrap">
+               <Heading size="md">Plantilla completa</Heading>
+               <SquadSearchBar query={query} setQuery={setQuery} onOpen={onOpen} sectionBg={sectionBg} />
+             </Flex>
             {(() => { console.log('DEBUG squad:', participant.squad); return null; })()}
             {participant.squad && participant.squad.length > 0 ? (
-              <Box overflowX="auto">
-                <table style={{ width: "100%", borderCollapse: "separate", borderSpacing: 0 }}>
-                  <thead>
-                    <tr style={{ background: "#e2e8f0", position: "sticky", top: 0, zIndex: 1 }}>
-                      <th style={{ fontWeight: 700, padding: '10px 8px', borderBottom: '2px solid #cbd5e1', textAlign: 'left', cursor: 'pointer' }} onClick={() => handleSort('name', 'ASC')}>Nombre{renderArrow('name')}</th>
-                      <th style={{ fontWeight: 700, padding: '10px 8px', borderBottom: '2px solid #cbd5e1', textAlign: 'left', cursor: 'pointer' }} onClick={() => handleSort('position', 'ASC')}>Posición{renderArrow('position')}</th>
-                      <th style={{ fontWeight: 700, padding: '10px 8px', borderBottom: '2px solid #cbd5e1', textAlign: 'left', cursor: 'pointer' }} onClick={() => handleSort('team', 'ASC')}>Equipo{renderArrow('team')}</th>
-                      <th style={{ fontWeight: 700, padding: '10px 8px', borderBottom: '2px solid #cbd5e1', textAlign: 'right', cursor: 'pointer' }} onClick={() => handleSort('market_value_num', 'DESC')}>Valor Mercado{renderArrow('market_value_num')}</th>
-                      <th style={{ fontWeight: 700, padding: '10px 8px', borderBottom: '2px solid #cbd5e1', textAlign: 'right', cursor: 'pointer' }} onClick={() => handleSort('clause_value', 'DESC')}>Cláusula{renderArrow('clause_value')}</th>
-                      <th style={{ fontWeight: 700, padding: '10px 8px', borderBottom: '2px solid #cbd5e1', textAlign: 'center', cursor: 'pointer' }} onClick={() => handleSort('is_clausulable', 'DESC')}>Clausulable{renderArrow('is_clausulable')}</th>
-                      <th style={{ fontWeight: 700, padding: '10px 8px', borderBottom: '2px solid #cbd5e1', textAlign: 'right', cursor: 'pointer' }} onClick={() => handleSort('total_points', 'DESC')}>Puntos{renderArrow('total_points')}</th>
-                      <th style={{ fontWeight: 700, padding: '10px 8px', borderBottom: '2px solid #cbd5e1', textAlign: 'center' }}>Acciones</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {getSortedSquad().map((player, idx) => (
-                      <EditablePlayerRow key={player.player_id || player.id}
-                        player={player}
-                        participantId={id}
-                        onChange={fetchParticipant}
-                        rowStyle={{ background: idx % 2 === 0 ? '#f8fafc' : '#fff', borderBottom: '1px solid #e2e8f0' }}
-                        // showClauseValue is not needed; let EditablePlayerRow always render 'Sí' only if is_clausulable is true
-                      />
-                    ))}
-                  </tbody>
-                </table>
-              </Box>
+              <SquadTable
+                squad={participant.squad}
+                sortedSquad={sortedSquad}
+                handleSort={handleSort}
+                renderArrow={renderArrow}
+                participantId={id}
+                fetchParticipant={fetchParticipant}
+              />
             ) : (
               <Text color="gray.500">No hay jugadores en la plantilla.</Text>
             )}
@@ -294,6 +301,10 @@ export default function ParticipantProfilePage() {
         {/* Transfer log card (right column) */}
         <PlayerTransferLog participantId={id} />
       </Flex>
+      {/* aria-live region for dynamic announcements */}
+      <Box position='absolute' width='1px' height='1px' overflow='hidden' clip='rect(0 0 0 0)' aria-live='polite'>
+        {liveMessage}
+      </Box>
     </Box>
   );
 }

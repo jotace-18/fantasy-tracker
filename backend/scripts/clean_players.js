@@ -1,4 +1,10 @@
-// scripts/cleanup-players.js
+// clean_players.js
+// -------------------------------------------------------------
+// Limpieza selectiva:
+//  - Elimina jugadores sin team_id
+//  - Elimina jugadores sin slug válido
+//  - Muestra el conteo restante
+// Uso: node scripts/clean_players.js
 const db = require("../src/db/db");
 
 console.log("🧹 Iniciando limpieza de jugadores...");

@@ -2,9 +2,18 @@ const sqlite3 = require("sqlite3").verbose();
 const path = require("path");
 const fs = require("fs");
 
-const dbDir = path.resolve(__dirname, "../../db");
-const dbPath = path.join(dbDir, "fantasy.sqlite");
-if (!fs.existsSync(dbDir)) fs.mkdirSync(dbDir, { recursive: true });
+// Permite sobreescribir la ruta de la BD (tests pueden usar copia temporal)
+const overridePath = process.env.DB_PATH;
+let dbPath;
+if (overridePath) {
+  dbPath = path.resolve(overridePath);
+  const dir = path.dirname(dbPath);
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+} else {
+  const dbDir = path.resolve(__dirname, "../../db");
+  if (!fs.existsSync(dbDir)) fs.mkdirSync(dbDir, { recursive: true });
+  dbPath = path.join(dbDir, "fantasy.sqlite");
+}
 
 const db = new sqlite3.Database(
   dbPath,

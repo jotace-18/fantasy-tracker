@@ -1,6 +1,12 @@
+/**
+ * Teams Controller
+ * ----------------
+ * Gestiona endpoints de equipos y sus jugadores.
+ */
 const teamsService = require("../services/teamsService");
 
 // GET /api/teams
+/** GET /api/teams - Lista equipos. */
 const getAllTeams = async (req, res) => {
   try {
     const teams = await teamsService.fetchAllTeams();
@@ -11,6 +17,7 @@ const getAllTeams = async (req, res) => {
   }
 };
 
+/** GET /api/teams/:id/players - Jugadores de un equipo por ID. */
 const getPlayersByTeam = async (req, res) => {
   try {
     const { id } = req.params;
@@ -25,6 +32,7 @@ const getPlayersByTeam = async (req, res) => {
 
 
 // POST /api/teams
+/** POST /api/teams - Crea un equipo. */
 const addTeam = async (req, res) => {
   try {
     const { name } = req.body;
@@ -37,6 +45,7 @@ const addTeam = async (req, res) => {
 };
 
 // POST /api/teams/bulk
+/** POST /api/teams/bulk - Inserta múltiples equipos. */
 const addTeamsBulk = async (req, res) => {
   try {
     const { names } = req.body;
@@ -49,6 +58,7 @@ const addTeamsBulk = async (req, res) => {
 };
 
 // POST /api/teams/import
+/** POST /api/teams/import - Importa equipos desde objeto {names:[]}. */
 const importTeams = async (req, res) => {
   try {
     const result = await teamsService.importTeams(req.body);

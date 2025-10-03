@@ -1,4 +1,18 @@
-// backend/src/routes/clockRoutes.js
+/**
+ * Clock Routes
+ * ------------
+ * Base path: /api/clock
+ * Expone el tiempo interno simulado y permite adelantar o fijar manualmente.
+ *
+ * Endpoints:
+ *  GET  /api/clock          -> Hora actual simulada
+ *  POST /api/clock/advance  -> Avanza minutos (body: {minutes:number})
+ *  POST /api/clock/set      -> Fija fecha absoluta (body: {date: ISOString})
+ *
+ * Notas:
+ *  - Útil para pruebas de lógica dependiente de tiempo sin manipular reloj real.
+ *  - No hay autenticación todavía; restringir en entorno productivo.
+ */
 const express = require('express');
 const router = express.Router();
 const clockService = require('../services/clockService');

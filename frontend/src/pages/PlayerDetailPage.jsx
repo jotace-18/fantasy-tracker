@@ -1,14 +1,14 @@
 // src/pages/PlayerDetailPage.jsx
 import { useEffect, useState, useMemo } from "react";
 import { useParams } from "react-router-dom";
-import {
-  Box, Spinner, Text, Badge, Table, Thead, Tbody, Tr, Th, Td,
-  TableContainer, SimpleGrid, Stat, StatLabel, StatNumber, StatHelpText,
-  Card, CardHeader, CardBody, Divider, Progress, HStack, Tooltip as CTooltip
-} from "@chakra-ui/react";
-import {
-  LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ReferenceDot
-} from "recharts";
+import { Box, Text, Skeleton, SimpleGrid, Badge, HStack, Link, Flex } from "@chakra-ui/react";
+import { Link as RouterLink } from 'react-router-dom';
+import { PlayerHeaderCard } from "../components/player/PlayerHeaderCard";
+import { PlayerStatsGrid } from "../components/player/PlayerStatsGrid";
+import OwnershipClauseCard from "../components/player/OwnershipClauseCard";
+import { MarketEvolutionChart } from "../components/player/MarketEvolutionChart";
+import { PointsHistoryCard } from "../components/player/PointsHistoryCard";
+import { PlayerPointsTrendChart } from "../components/player/PlayerPointsTrendChart";
 
 // helpers
 const toInt = (v) => {
@@ -28,13 +28,19 @@ const parseDateTs = (s) => {
   return Number.isFinite(t) ? t : null;
 };
 const euro = (n) => (typeof n === "number" ? n.toLocaleString("es-ES") : n ?? "-");
-const fmtDate = (ts) =>
-  new Date(ts).toLocaleDateString("es-ES", { day: "2-digit", month: "2-digit", year: "2-digit" });
 
 function PlayerDetailPage() {
   const { id } = useParams();
   const [player, setPlayer] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [range, setRange] = useState(() => sessionStorage.getItem('chart_range') || 'all'); // '7' | '14' | 'all'
+  const [showHeatmap, setShowHeatmap] = useState(true);
+  const [nextMatch, setNextMatch] = useState(null); // { jornada, esLocal, rivalNombre, rivalSlug, rivalId, fecha, estado }
+
+  const slugify = (str)=> String(str||'')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .toLowerCase().replace(/[^a-z0-9\s-]/g,'')
+    .trim().replace(/\s+/g,'-').replace(/-+/g,'-');
 
   useEffect(() => {
     setLoading(true);
@@ -49,6 +55,82 @@ function PlayerDetailPage() {
         setLoading(false);
       });
   }, [id]);
+
+  // Obtener calendario y determinar próximo rival
+  useEffect(()=>{
+    let abort=false;
+    if(!player) return;
+    const teamId = player.team_id; // asumimos que el endpoint player incluye team_id
+    if(!teamId){ setNextMatch(null); return; }
+    Promise.all([
+      fetch('http://localhost:4000/api/calendar/next?limit=38').then(r=>r.json()),
+      fetch('http://localhost:4000/api/clock').then(r=>r.json()).catch(()=>({currentTime:new Date().toISOString()}))
+    ]).then(([calData,clockData])=>{
+      if(abort) return;
+      const now = new Date(clockData.currentTime);
+      // Nueva lógica solicitada:
+      // 1. La "próxima jornada" es la primera jornada cuyo fecha_cierre AÚN NO ha pasado (fecha_cierre > now).
+      // 2. No importa si los enfrentamientos anteriores tienen partidos sin goles cargados: el criterio de cierre es la fecha_cierre.
+      // 3. Una vez identificada esa jornada, buscamos el enfrentamiento del equipo del jugador.
+      // 4. Si en esa jornada no aparece (edge case), buscamos en la siguiente futura, manteniendo la misma regla.
+
+      const jornadasOrdenadas = [...calData].sort((a,b)=>{
+        // ordenar por fecha_cierre si existe; fallback a numero
+        const aC = a.fecha_cierre ? new Date(a.fecha_cierre).getTime() : Infinity;
+        const bC = b.fecha_cierre ? new Date(b.fecha_cierre).getTime() : Infinity;
+        if(aC !== bC) return aC - bC;
+        return (a.numero||0) - (b.numero||0);
+      });
+
+      // filtrar solo jornadas con fecha_cierre futura
+      const futuras = jornadasOrdenadas.filter(j=>{
+        if(!j.fecha_cierre) return false; // si no hay fecha_cierre no podemos determinar; descartamos para evitar falsos positivos
+        return new Date(j.fecha_cierre).getTime() > now.getTime();
+      });
+
+      // fallback si ninguna tiene fecha_cierre futura (temporada finalizada o datos incompletos): usar última jornada sin cerrar basada en goles
+      let candidata = futuras[0];
+      if(!candidata){
+        candidata = jornadasOrdenadas.find(j=>{
+          const enfList = j.enfrentamientos||[];
+            return enfList.some(e=> e.goles_local==null || e.goles_visitante==null);
+        });
+      }
+
+      if(!candidata){
+        setNextMatch(null);
+        return;
+      }
+
+      // Intentar encontrar enfrentamiento del equipo en la jornada candidata; si no está, buscar en subsiguientes futuras
+      const candidatasParaBuscar = [candidata, ...futuras.slice(1)];
+      for(const jornada of candidatasParaBuscar){
+        const enfList = jornada.enfrentamientos || [];
+        const enf = enfList.find(e=> e.equipo_local_id===teamId || e.equipo_visitante_id===teamId);
+        if(!enf) continue; // probar siguiente jornada futura
+
+        const esLocal = enf.equipo_local_id===teamId;
+        const rivalNombre = esLocal ? (enf.equipo_visitante_alias||enf.equipo_visitante_nombre) : (enf.equipo_local_alias||enf.equipo_local_nombre);
+        const rivalId = esLocal ? enf.equipo_visitante_id : enf.equipo_local_id;
+        const rivalSlug = slugify(rivalNombre);
+        const fecha = enf.fecha_partido ? new Date(enf.fecha_partido).toLocaleString('es-ES',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : null;
+        setNextMatch({
+          jornada: jornada.numero,
+          esLocal,
+          rivalNombre,
+          rivalSlug,
+          rivalId,
+          fecha,
+          estado: enf.estado
+        });
+        return;
+      }
+
+      // Si no hay enfrentamiento en jornadas futuras (extraño), limpiamos
+      setNextMatch(null);
+    }).catch(e=>{ if(!abort) setNextMatch(null); console.error('[PlayerDetail] calendario/clock error',e); });
+    return ()=>{abort=true};
+  },[player]);
 
   const { historySorted, maxItem, minItem } = useMemo(() => {
     const raw = player?.market?.history || [];
@@ -70,11 +152,29 @@ function PlayerDetailPage() {
     return { historySorted: mapped, maxItem, minItem };
   }, [player]);
 
+  const displayHistory = useMemo(() => {
+    if (!historySorted.length) return historySorted;
+    if (range === 'all') return historySorted;
+    const n = parseInt(range, 10);
+    if (Number.isNaN(n) || historySorted.length <= n) return historySorted;
+    return historySorted.slice(historySorted.length - n);
+  }, [historySorted, range]);
+
+  useEffect(() => {
+    sessionStorage.setItem('chart_range', range);
+  }, [range]);
+
   if (loading) {
     return (
-      <Box textAlign="center" mt="10">
-        <Spinner size="xl" />
-        <Text mt="2">Cargando detalle del jugador...</Text>
+      <Box p={6}>
+        <SimpleGrid columns={[1,2,4]} spacing={6} mb={6}>
+          {Array.from({length:4}).map((_,i)=>(
+            <Skeleton key={i} height="120px" borderRadius="xl" />
+          ))}
+        </SimpleGrid>
+        <Skeleton height="180px" borderRadius="2xl" mb={6} />
+        <Skeleton height="340px" borderRadius="2xl" mb={6} />
+        <Skeleton height="280px" borderRadius="2xl" />
       </Box>
     );
   }
@@ -92,196 +192,70 @@ function PlayerDetailPage() {
   const mvCurrent = toInt(player.market.current);
   const mvMax = toInt(player.market.max);
   const mvMin = toInt(player.market.min);
-
-  // Mapear riesgo
-  const mapRisk = (r) => {
-    if (r == null) return { label: "Sin dato", color: "gray", percent: 0 };
-    if (r <= 1) return { label: "Riesgo muy bajo", color: "green", percent: 15 };
-    if (r === 2) return { label: "Riesgo bajo", color: "green", percent: 30 };
-    if (r === 3) return { label: "Riesgo moderado", color: "yellow", percent: 55 };
-    if (r === 4) return { label: "Riesgo alto", color: "orange", percent: 75 };
-    return { label: "Riesgo muy alto", color: "red", percent: 90 };
-  };
-  const riskInfo = mapRisk(player.risk_level);
-
-  const titularPct = player.titular_next_jor != null ? Math.round(player.titular_next_jor * 100) : null;
-
-  const lesionBadge = player.lesionado ? {
-    text: "Lesionado",
-    color: "red"
-  } : {
-    text: "Disponible",
-    color: "green"
-  };
+  const stats = [
+    {label:'Valor Actual', value: mvCurrent, color:'teal.600', delta: player.market.delta, isMoney:true},
+    {label:'Valor Máximo', value: mvMax, color:'green.500', isMoney:true},
+    {label:'Valor Mínimo', value: mvMin, color:'red.500', isMoney:true},
+    {label:'Puntos Totales', value: player.points.total, color:'purple.600', help:`Media: ${player.points.avg}`},
+  ];
 
   return (
     <Box p={6}>
-      {/* Cabecera */}
-      <Card mb={6} shadow="lg" borderRadius="2xl" p={4}>
-        <CardHeader pb={2}>
-          <Text fontSize="3xl" fontWeight="bold" color="teal.600">
-            {player.name}
-          </Text>
-          <Text fontSize="lg" color="gray.600">
-            {player.team_name} • {player.position}
-          </Text>
-          <HStack mt={3} spacing={3} wrap="wrap" alignItems="center">
-            <CTooltip label={`Índice: ${player.risk_level ?? '-'} / Categoría derivada.`} hasArrow>
-              <Badge colorScheme={riskInfo.color} px={3} py={1} borderRadius="lg" fontWeight="semibold">
-                {riskInfo.label}
-              </Badge>
-            </CTooltip>
-            <Badge colorScheme={lesionBadge.color} px={3} py={1} borderRadius="lg" fontWeight="bold">
-              {lesionBadge.text}
-            </Badge>
-            {titularPct != null && (
-              <Badge
-                colorScheme={titularPct >= 80 ? "green" : titularPct >= 50 ? "yellow" : "red"}
-                px={3}
-                py={1}
-                borderRadius="lg"
-                fontWeight="bold"
-              >
-                Titular J próxima: {titularPct}%
-              </Badge>
-            )}
+  <PlayerHeaderCard player={player} />
+  <OwnershipClauseCard player={player} />
+      {nextMatch && (
+        <Box
+          as={Flex}
+          mb={6}
+          align='center'
+          gap={4}
+          p={4}
+          borderRadius='2xl'
+          bgGradient='linear(to-r, gray.50, gray.100)'
+          _dark={{ bgGradient: 'linear(to-r, gray.700, gray.600)', borderColor: 'gray.600' }}
+          borderWidth='1px'
+          flexWrap='wrap'
+        >
+          <Badge colorScheme={nextMatch.esLocal ? 'green' : 'purple'}>{nextMatch.esLocal ? 'LOCAL' : 'VISITANTE'}</Badge>
+          <Badge colorScheme='blue'>J {nextMatch.jornada}</Badge>
+          <HStack spacing={2}>
+            <Text fontWeight='bold'>Próximo:</Text>
+            <Text fontSize='sm' color='gray.600' _dark={{ color: 'gray.300' }}>vs</Text>
+            <Link as={RouterLink} to={`/teams/${nextMatch.rivalSlug || nextMatch.rivalId}`} fontWeight='semibold' _hover={{ textDecoration: 'underline' }}>{nextMatch.rivalNombre}</Link>
           </HStack>
-          <Box mt={4} maxW="380px">
-            <Text fontSize="sm" mb={1} color="gray.600">Riesgo de lesión</Text>
-            <Progress
-              value={riskInfo.percent}
-              size="sm"
-              colorScheme={riskInfo.color}
-              borderRadius="md"
-              hasStripe
-              isAnimated
-            />
-          </Box>
-        </CardHeader>
-      </Card>
-
-      {/* Stats */}
-      <SimpleGrid columns={[1, 2, 4]} spacing={6} mb={6}>
-        <Stat p={4} shadow="md" borderRadius="xl" bg="gray.50">
-          <StatLabel>Valor Actual</StatLabel>
-          <StatNumber color="teal.600">{euro(mvCurrent)} €</StatNumber>
-          <StatHelpText>Δ {player.market.delta ?? "-"}</StatHelpText>
-        </Stat>
-        <Stat p={4} shadow="md" borderRadius="xl" bg="gray.50">
-          <StatLabel>Valor Máximo</StatLabel>
-          <StatNumber color="green.500">{euro(mvMax)} €</StatNumber>
-        </Stat>
-        <Stat p={4} shadow="md" borderRadius="xl" bg="gray.50">
-          <StatLabel>Valor Mínimo</StatLabel>
-          <StatNumber color="red.500">{euro(mvMin)} €</StatNumber>
-        </Stat>
-        <Stat p={4} shadow="md" borderRadius="xl" bg="gray.50">
-          <StatLabel>Puntos Totales</StatLabel>
-          <StatNumber color="purple.600">{player.points.total}</StatNumber>
-          <StatHelpText>Media: {player.points.avg}</StatHelpText>
-        </Stat>
-      </SimpleGrid>
-
-      {/* Gráfico de evolución de mercado */}
-      {historySorted.length > 0 && (
-        <Card shadow="md" borderRadius="2xl" mb={6}>
-          <CardHeader>
-            <Text fontSize="xl" fontWeight="bold">
-              Evolución del Valor de Mercado
-            </Text>
-          </CardHeader>
-          <Divider />
-          <CardBody>
-            <ResponsiveContainer width="100%" height={320}>
-              <LineChart data={historySorted}>
-                <CartesianGrid strokeDasharray="3 3" />
-                {/* Eje X temporal */}
-                <XAxis
-                  dataKey="ts"
-                  type="number"
-                  domain={["dataMin", "dataMax"]}
-                  tickFormatter={fmtDate}
-                />
-                {/* Eje Y dinámico */}
-                <YAxis
-                  domain={["dataMin - 2000000", "dataMax + 2000000"]}
-                  tickFormatter={(v) => `${(v / 1_000_000).toFixed(0)}M`}
-                />
-                <Tooltip
-                  labelFormatter={(ts) => `Fecha: ${fmtDate(ts)}`}
-                  formatter={(v) => [`${euro(v)} €`, "Valor"]}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="value"
-                  stroke="#3182CE"
-                  strokeWidth={2}
-                  dot={false}
-                />
-                {/* Marca Máximo */}
-                {maxItem && (
-                  <ReferenceDot
-                    x={maxItem.ts}
-                    y={maxItem.value}
-                    r={6}
-                    fill="green"
-                    stroke="black"
-                    label={{ value: "Máx", position: "top", fill: "green" }}
-                  />
-                )}
-                {/* Marca Mínimo */}
-                {minItem && (
-                  <ReferenceDot
-                    x={minItem.ts}
-                    y={minItem.value}
-                    r={6}
-                    fill="red"
-                    stroke="black"
-                    label={{ value: "Mín", position: "bottom", fill: "red" }}
-                  />
-                )}
-              </LineChart>
-            </ResponsiveContainer>
-          </CardBody>
-        </Card>
+          {nextMatch.fecha && <Badge variant='subtle' colorScheme='gray'>{nextMatch.fecha}</Badge>}
+          {nextMatch.estado && <Badge variant='outline' colorScheme='orange'>{nextMatch.estado}</Badge>}
+        </Box>
       )}
-
-      {/* Historial de puntos */}
-      <Card shadow="md" borderRadius="2xl">
-        <CardHeader>
-          <Text fontSize="xl" fontWeight="bold">
-            Historial de Puntos Fantasy
-          </Text>
-        </CardHeader>
-        <Divider />
-        <CardBody>
-          <TableContainer>
-            <Table variant="striped" colorScheme="teal" size="sm">
-              <Thead>
-                <Tr>
-                  <Th>Jornada</Th>
-                  <Th isNumeric>Puntos</Th>
-                </Tr>
-              </Thead>
-              <Tbody>
-                {player.points.history.map((p, idx) => (
-                  <Tr key={idx}>
-                    <Td fontWeight="medium">{p.jornada}</Td>
-                    <Td
-                      isNumeric
-                      color={p.points < 0 ? "red.500" : "green.600"}
-                      fontWeight="semibold"
-                    >
-                      {p.points}
-                    </Td>
-                  </Tr>
-                ))}
-              </Tbody>
-            </Table>
-          </TableContainer>
-        </CardBody>
-      </Card>
+      <PlayerStatsGrid stats={stats} />
+      <MarketEvolutionChart history={displayHistory} range={range} onRangeChange={setRange} maxItem={maxItem} minItem={minItem} />
+  <PointsHistoryCard history={player.points.history} showHeatmap={showHeatmap} onToggle={() => setShowHeatmap(h => !h)} />
+  <PlayerPointsTrendChart history={player.points.history} />
     </Box>
+  );
+}
+
+// Componente AnimatedNumber
+function AnimatedNumber({ value, color, isMoney }) {
+  const [display, setDisplay] = useState(0);
+  useEffect(() => {
+    if (value == null) return;
+    const start = 0;
+    const duration = 650; // ms
+    const startTs = performance.now();
+    let frame;
+    const step = (now) => {
+      const p = Math.min(1, (now - startTs) / duration);
+      const eased = 1 - Math.pow(1 - p, 3); // easeOutCubic
+      const current = Math.round(start + (value - start) * eased);
+      setDisplay(current);
+      if (p < 1) frame = requestAnimationFrame(step);
+    };
+    frame = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(frame);
+  }, [value]);
+  return (
+    <StatNumber color={color}>{value == null ? '-' : `${isMoney? euro(display): display}${isMoney? ' €': ''}`}</StatNumber>
   );
 }
 

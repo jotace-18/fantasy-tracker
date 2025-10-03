@@ -2,14 +2,16 @@
 
 /**
  * Calendar Routes
- * ----------------
- * Define las rutas de la API relacionadas con el calendario de jornadas.
+ * --------------
+ * Base path: /api/calendar
+ * Operaciones sobre jornadas y sus enfrentamientos.
  *
  * Endpoints:
- *  - GET  /api/calendar/next               → Obtiene próximas jornadas y enfrentamientos
- *  - PUT  /api/calendar/:jornadaId/fecha-cierre → Actualiza la fecha de cierre de una jornada
+ *  GET  /api/calendar/next                     -> getNextJornadas (próximas jornadas + matches)
+ *  PUT  /api/calendar/:jornadaId/fecha-cierre  -> updateFechaCierre (cierre manual)
  *
- * Depende de: `calendarController.js`
+ * Notas:
+ *  - El cierre manual permite bloquear operaciones dependientes de jornada (fichajes, alineaciones, etc.).
  */
 
 const express = require("express");

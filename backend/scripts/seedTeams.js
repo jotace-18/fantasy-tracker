@@ -1,5 +1,8 @@
 // backend/scripts/seedTeams.js
-// Semilla de equipos de LaLiga 25/26
+// -------------------------------------------------------------
+// Semilla / upsert de equipos base (LaLiga 25/26). Evita duplicados
+// usando upsertTeamByName. Reejecutable sin efectos adversos.
+// Uso: node scripts/seedTeams.js
 
 const path = require("path");
 require("dotenv").config({ path: path.resolve(__dirname, "../.env") });

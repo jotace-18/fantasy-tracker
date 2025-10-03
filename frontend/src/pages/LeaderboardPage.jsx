@@ -1,210 +1,149 @@
-import { useEffect, useState } from "react";
-import {
-  Box,
-  Heading,
-  Table,
-  Thead,
-  Tbody,
-  Tr,
-  Th,
-  Td,
-  Select,
-  Spinner,
-  Badge,
-  Flex,
-  Text,
-  useDisclosure,
-  Button,
-} from "@chakra-ui/react";
-
+import { useEffect, useState, useMemo } from "react";
+import { Box, Text, Badge, HStack, Flex, Select, Spinner, useDisclosure, Button } from "@chakra-ui/react";
+import { PageHeader } from "../components/ui/PageHeader";
+import { DataTableShell } from "../components/ui/DataTableShell";
+import { AsyncState } from "../components/ui/AsyncState";
 import AddPointsModal from "../components/AddPointsModal";
 
-export default function LeaderboardPage() {
-  const [data, setData] = useState([]);
+export default function LeaderboardPage(){
+  const [participants, setParticipants] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [selectedJornada, setSelectedJornada] = useState("total");
+  const [error, setError] = useState(null);
+  const [jornada, setJornada] = useState('total');
   const { isOpen, onOpen, onClose } = useDisclosure();
 
-  useEffect(() => {
-    const fetchLeaderboard = async () => {
-      try {
-        const res = await fetch(
-          "http://localhost:4000/api/participants/leaderboard"
-        );
-        const json = await res.json();
-        setData(json);
-      } catch (err) {
-        console.error("❌ Error cargando leaderboard:", err);
-      } finally {
-        setLoading(false);
+  useEffect(()=>{
+    let cancelled=false;
+    setLoading(true); setError(null);
+    fetch('http://localhost:4000/api/participants/leaderboard')
+      .then(r=>{ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
+      .then(data=>{ if(!cancelled) setParticipants(Array.isArray(data)? data:[]); })
+      .catch(err=>{ if(!cancelled){ console.error('❌ Error leaderboard:', err); setError(err.message||'Error desconocido'); }})
+      .finally(()=>{ if(!cancelled) setLoading(false); });
+    return ()=> { cancelled=true; };
+  },[]);
+
+  const jornadas = useMemo(()=> Array.from(new Set(participants.flatMap(p=> p.history.map(h=> h.jornada)))).sort((a,b)=> a-b), [participants]);
+
+  const ranked = useMemo(()=> {
+    return participants.map(p=> {
+      // Aseguramos orden por jornada ascendente para cálculos consistentes
+      const history = [...p.history].sort((a,b)=> a.jornada - b.jornada);
+      const jornadasCount = history.length || 1;
+      const avg = p.total_points && jornadasCount ? (p.total_points / jornadasCount) : 0;
+
+      // Puntos mostrados según selector
+      let pts;
+      if(jornada==='total') {
+        pts = p.total_points;
+      } else {
+        const current = history.find(h=> h.jornada===Number(jornada));
+        pts = current ? current.points : 0;
       }
-    };
-    fetchLeaderboard();
-  }, []);
 
-  // 🔢 Calcular jornadas disponibles dinámicamente
-  const allJornadas = Array.from(
-    new Set(data.flatMap((p) => p.history.map((h) => h.jornada)))
-  ).sort((a, b) => a - b);
+      // Delta:
+      // - En vista total: diferencia entre la última jornada registrada y la anterior.
+      // - En vista de jornada específica: puntos esa jornada - puntos jornada anterior inmediata.
+      let delta = null;
+      if(history.length > 1) {
+        if(jornada==='total') {
+          const last = history[history.length-1].points;
+            const prev = history[history.length-2].points;
+            delta = last - prev; // int (puntos ya enteros)
+        } else {
+          const idx = history.findIndex(h=> h.jornada===Number(jornada));
+          if(idx > 0) {
+            const cur = history[idx].points;
+            const prev = history[idx-1].points;
+            delta = cur - prev;
+          }
+        }
+      }
 
-  // 🔄 Obtener puntos por jornada o total
-  const getPoints = (participant) => {
-    if (selectedJornada === "total") return participant.total_points;
-    const jornadaPoints = participant.history.find(
-      (h) => h.jornada === Number(selectedJornada)
-    );
-    return jornadaPoints ? jornadaPoints.points : 0;
-  };
+      return { ...p, points: pts, avgPoints: avg, delta, isUser: p.id === 8 };
+    }).sort((a,b)=> b.points - a.points);
+  }, [participants, jornada]);
 
-  // 🎨 Escala armónica de colores (más rango que un semáforo)
-  const getColor = (points) => {
-    if (points >= 90) return "green.600";
-    if (points >= 75) return "teal.500";
-    if (points >= 60) return "blue.500";
-    if (points >= 45) return "cyan.400";
-    if (points >= 30) return "yellow.500";
-    if (points >= 20) return "orange.400";
-    if (points >= 10) return "red.400";
-    return "purple.500";
-  };
+  const avgPoints = ranked.length ? (ranked.reduce((a,p)=> a+p.points,0)/ranked.length).toFixed(1) : '-';
+  const totalPoints = ranked.reduce((a,p)=> a+p.points,0);
+  const topMoney = ranked.reduce((m,p)=> p.money > (m?.money||-Infinity) ? p : m, null);
 
-  // 📊 Ordenar ranking
-  const sorted = [...data].sort((a, b) => getPoints(b) - getPoints(a));
+  const colorFor = (pts)=> pts >= 90 ? 'green' : pts>=70? 'teal' : pts>=50? 'blue' : pts>=35? 'cyan' : pts>=20? 'yellow' : pts>=10? 'orange' : 'purple';
 
   return (
-    <Box p={8}>
-      {/* Título + selector en la misma línea */}
-      <Flex justify="space-between" align="center" mb={6} wrap="wrap" gap={4}>
-        <Heading size="lg" display="flex" alignItems="center" gap={2}>
-          🏆 Leaderboard Fantasy
-        </Heading>
-        <Select
-          maxW="220px"
-          value={selectedJornada}
-          onChange={(e) => setSelectedJornada(e.target.value)}
-          boxShadow="sm"
-          borderColor="gray.300"
-        >
-          <option value="total">🌍 Total</option>
-          {allJornadas.map((j) => (
-            <option key={j} value={j}>
-              Jornada {j}
-            </option>
-          ))}
-        </Select>
-      </Flex>
-
-      {/* Botón para añadir puntos */}
-      <Flex justify="flex-end" mb={4}>
-        <Button colorScheme="teal" onClick={onOpen}>➕ Añadir puntos jornada</Button>
-      </Flex>
-
-      <AddPointsModal
-        isOpen={isOpen}
-        onClose={onClose}
-        participants={data}
-        onSaved={() => window.location.reload()} // refresca tras guardar
+    <Box p={6} maxW='1400px' mx='auto'>
+      <PageHeader
+        title='Leaderboard'
+        subtitle='Clasificación de participantes'
+        icon={<span>🏆</span>}
+        meta={[ jornada==='total' ? 'Total acumulado' : `Jornada ${jornada}`, `Participantes ${ranked.length}` ]}
+        actions={[
+          <Select key='j' size='sm' value={jornada} onChange={e=> setJornada(e.target.value)} width='170px' bg='white' color='gray.800' _dark={{ bg:'gray.700', color:'gray.100' }}>
+            <option value='total'>🌍 Total</option>
+            {jornadas.map(j=> <option key={j} value={j}>Jornada {j}</option>)}
+          </Select>,
+          <Button key='add' size='sm' colorScheme='teal' onClick={onOpen}>➕ Puntos</Button>
+        ]}
       />
-
-      {loading ? (
-        <Flex justify="center" align="center" h="200px">
-          <Spinner size="xl" color="blue.500" />
-        </Flex>
-      ) : (
-        <Table variant="simple" size="md">
-          <Thead bg="gray.50">
-            <Tr>
-              <Th>#</Th>
-              <Th>Participante</Th>
-              <Th isNumeric>Dinero</Th>
-              <Th isNumeric>Puntos</Th>
-            </Tr>
-          </Thead>
-          <Tbody>
-            {sorted.map((p, i) => {
-              const points = getPoints(p);
-              let badge;
-              if (i === 0) badge = <Badge colorScheme="yellow">🥇</Badge>;
-              else if (i === 1) badge = <Badge colorScheme="gray">🥈</Badge>;
-              else if (i === 2) badge = <Badge colorScheme="orange">🥉</Badge>;
-
-              // 🎨 Fila con un toque sutil para top 3
-              const bgRow =
-                i === 0
-                  ? "yellow.50"
-                  : i === 1
-                  ? "gray.50"
-                  : i === 2
-                  ? "orange.50"
-                  : "white";
-
+      {/* KPIs */}
+      <HStack spacing={4} mt={4} mb={3} wrap='wrap'>
+        <Box px={4} py={2} bg='gray.50' _dark={{ bg:'gray.700' }} borderRadius='md' boxShadow='sm'>
+          <Text fontSize='xs' textTransform='uppercase' letterSpacing='.7px' color='gray.500' _dark={{ color:'gray.400' }} fontWeight='semibold'>Media puntos</Text>
+          <Text fontSize='lg' fontWeight='bold'>{avgPoints}</Text>
+        </Box>
+        <Box px={4} py={2} bg='gray.50' _dark={{ bg:'gray.700' }} borderRadius='md' boxShadow='sm'>
+          <Text fontSize='xs' textTransform='uppercase' letterSpacing='.7px' color='gray.500' _dark={{ color:'gray.400' }} fontWeight='semibold'>Total puntos</Text>
+          <Text fontSize='lg' fontWeight='bold'>{totalPoints}</Text>
+        </Box>
+        {topMoney && <Box px={4} py={2} bg='gray.50' _dark={{ bg:'gray.700' }} borderRadius='md' boxShadow='sm'>
+          <Text fontSize='xs' textTransform='uppercase' letterSpacing='.7px' color='gray.500' _dark={{ color:'gray.400' }} fontWeight='semibold'>Top dinero</Text>
+          <Text fontSize='lg' fontWeight='bold'>€{(topMoney.money||0).toLocaleString('es-ES')} <Text as='span' fontSize='xs' ml={1} color='gray.500' _dark={{ color:'gray.400' }}>{topMoney.name}</Text></Text>
+        </Box>}
+      </HStack>
+      <AddPointsModal isOpen={isOpen} onClose={onClose} participants={participants} onSaved={()=> window.location.reload()} />
+      <AsyncState loading={loading} error={error} empty={!loading && !error && ranked.length===0} emptyMessage='Sin participantes'>
+        <DataTableShell maxH='70vh' stickyHeader hoverHighlight>
+          <thead>
+            <tr>
+              <th style={{ width:'55px' }}>#</th>
+              <th style={{ minWidth:'220px' }}>Participante</th>
+              <th style={{ textAlign:'right', width:'140px' }}>Dinero</th>
+              <th style={{ textAlign:'right', width:'110px' }}>Media</th>
+              <th style={{ textAlign:'right', width:'110px' }}>Δ</th>
+              <th style={{ textAlign:'right', width:'110px' }}>Puntos</th>
+            </tr>
+          </thead>
+          <tbody>
+            {ranked.map((p,i)=> {
+              const rank = i+1;
+              const badge = rank===1? '🥇' : rank===2? '🥈' : rank===3? '🥉' : `#${rank}`;
+              const deltaDisplay = p.delta==null ? '—' : (p.delta>0? `+${p.delta}` : p.delta===0? '0' : p.delta);
               return (
-                <Tr
-                  key={p.id}
-                  bg={bgRow}
-                  _hover={{ bg: "gray.100" }}
-                  transition="all 0.2s ease"
-                >
-                  <Td fontWeight="bold">
-                    {i + 1} {badge}
-                  </Td>
-                  <Td>
-                    {p.name === "Jc" ? (
-                      <Text
-                        as={"a"}
-                        href="/my-team"
-                        fontWeight={i < 3 ? "semibold" : "medium"}
-                        color="blue.600"
-                        _hover={{ textDecoration: "underline", color: "blue.800" }}
-                      >
-                        {p.name}
-                      </Text>
-                    ) : (
-                      <Text
-                        as={"a"}
-                        href={`/participants/${p.id}`}
-                        fontWeight={i < 3 ? "semibold" : "medium"}
-                        color="blue.600"
-                        _hover={{ textDecoration: "underline", color: "blue.800" }}
-                      >
-                        {p.name}
-                      </Text>
-                    )}
-                  </Td>
-                  <Td isNumeric>
-                    <Badge
-                      color={p.money >= 0 ? "green.700" : "red.700"}
-                      bg={p.money >= 0 ? "green.100" : "red.100"}
-                      px={4}
-                      py={2}
-                      borderRadius="full"
-                      fontSize="md"
-                      fontWeight="bold"
-                      boxShadow="sm"
-                    >
-                      €{(p.money ?? 0).toLocaleString("es-ES")}
-                    </Badge>
-                  </Td>
-                  <Td isNumeric>
-                    <Badge
-                      color="white"
-                      bg={getColor(points)}
-                      px={4}
-                      py={2}
-                      borderRadius="full"
-                      fontSize="md"
-                      fontWeight="bold"
-                      boxShadow="sm"
-                    >
-                      {points}
-                    </Badge>
-                  </Td>
-                </Tr>
+                <tr key={p.id} style={{ cursor:'pointer', background: p.isUser ? 'var(--chakra-colors-teal-50)' : undefined }}>
+                  <td>
+                    <Badge fontSize='0.6rem' px={2} py={1} borderRadius='full' variant='solid' boxShadow={p.isUser? '0 0 0 2px var(--chakra-colors-teal-300)':''} colorScheme={badge.includes('🥇')? 'yellow' : badge.includes('🥈')? 'gray' : badge.includes('🥉')? 'orange':'teal'}>{badge}</Badge>
+                  </td>
+                  <td>
+                    <Text as='a' href={p.name==='Jc'? '/my-team' : `/participants/${p.id}`} fontWeight={p.isUser? 'bold' : (rank<=3? 'semibold':'medium')} color={p.isUser? 'teal.700':'blue.600'} _hover={{ textDecoration:'underline', color: p.isUser? 'teal.800':'blue.700' }}>{p.name}</Text>
+                  </td>
+                  <td style={{ textAlign:'right' }}>
+                    <Badge bg={p.money>=0? 'green.100':'red.100'} color={p.money>=0? 'green.700':'red.700'} px={3} py={1.5} fontSize='0.75rem' fontWeight='bold' borderRadius='full'>€{(p.money||0).toLocaleString('es-ES')}</Badge>
+                  </td>
+                  <td style={{ textAlign:'right', fontVariantNumeric:'tabular-nums' }}>
+                    <Text as='span' fontSize='0.75rem' fontWeight='semibold'>{p.avgPoints.toFixed(1)}</Text>
+                  </td>
+                  <td style={{ textAlign:'right', fontVariantNumeric:'tabular-nums' }}>
+                    <Badge px={2} py={1} fontSize='0.65rem' borderRadius='full' colorScheme={p.delta>0? 'green': p.delta<0? 'red':'gray'} variant='subtle'>{deltaDisplay}</Badge>
+                  </td>
+                  <td style={{ textAlign:'right' }}>
+                    <Badge colorScheme={colorFor(p.points)} variant='solid' px={3} py={1.5} fontSize='0.8rem' fontWeight='bold' borderRadius='full'>{p.points}</Badge>
+                  </td>
+                </tr>
               );
             })}
-          </Tbody>
-        </Table>
-      )}
+          </tbody>
+        </DataTableShell>
+      </AsyncState>
     </Box>
   );
 }

@@ -27,6 +27,15 @@ frontend/public/vite.svg
 # Database
 # ========================
 db/fantasy.sqlite
+backend/backups/
+backend/backups/**
+backend/*.sqlite
+
+# Env files
+backend/.env
+backend/.env.local
+.env
+.env.local
 
 # ========================
 # OS files
@@ -41,4 +50,4 @@ Thumbs.db
 .idea/
 *.iml
 *.swp
-backend/.env
+!backend/.env.example

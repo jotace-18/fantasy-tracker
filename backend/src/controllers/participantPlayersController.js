@@ -1,7 +1,13 @@
 
+/**
+ * Participant Players Controller
+ * ------------------------------
+ * Endpoints para gestionar la plantilla de un participante y su lógica de cláusulas.
+ */
 const service = require("../services/participantPlayersService");
 
 // Obtener plantilla (unificado)
+/** GET /api/participants/:id/team - Lista plantilla aplicando refresco de cláusulas. */
 function getTeam(req, res) {
   const { id } = req.params;
   service.fetchTeam(id, (err, rows) => {
@@ -11,16 +17,19 @@ function getTeam(req, res) {
 }
 
 // Añadir jugador (unificado)
+/** POST /api/participants/:id/team - Añade jugador a la plantilla. */
 function addPlayer(req, res) {
   const { id } = req.params;
   const { player_id, status } = req.body;
   service.addPlayer({ participant_id: id, player_id, status }, (err, result) => {
     if (err) return res.status(400).json({ error: err.message });
-    res.json(result);
+    // Añadimos eco de parámetros para facilitar depuración en tests
+    res.json({ ...result, participant_id: id, player_id });
   });
 }
 
 // Actualizar status y slot_index (unificado)
+/** PATCH /api/participants/:id/team/:playerId/status - Actualiza status/slot (restricción id=8). */
 function updateStatus(req, res) {
   const { id, playerId } = req.params;
   const { status, slot_index } = req.body;
@@ -31,6 +40,7 @@ function updateStatus(req, res) {
 }
 
 // Eliminar jugador (unificado)
+/** DELETE /api/participants/:id/team/:playerId - Quita jugador. */
 function removePlayer(req, res) {
   const { id, playerId } = req.params;
   service.removePlayer(id, playerId, (err, result) => {
@@ -40,6 +50,7 @@ function removePlayer(req, res) {
 }
 
 // PATCH: Editar valor de cláusula (unificado)
+/** PATCH /api/participants/:id/team/:playerId/clause - Actualiza clause_value. */
 function updateClauseValue(req, res) {
   const { id, playerId } = req.params;
   let { clause_value } = req.body;
@@ -56,6 +67,7 @@ function updateClauseValue(req, res) {
 }
 
 // PATCH: Editar clausulabilidad (unificado)
+/** PATCH /api/participants/:id/team/:playerId/clausulable - Activa/desactiva clausulable. */
 function updateClausulable(req, res) {
   const { id, playerId } = req.params;
   let { is_clausulable } = req.body;
@@ -75,6 +87,7 @@ function updateClausulable(req, res) {
 }
 
 // PATCH: Editar tiempo de cláusula (unificado)
+/** PATCH /api/participants/:id/team/:playerId/clause-lock - Extiende lock. */
 function updateClauseLock(req, res) {
   const { id, playerId } = req.params;
   let { days, hours } = req.body;

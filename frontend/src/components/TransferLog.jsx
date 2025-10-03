@@ -1,6 +1,6 @@
 // components/TransferLog.jsx
 import { useState, useEffect } from "react";
-import { Box, Text, Flex, Spinner } from "@chakra-ui/react";
+import { Box, Text, Flex, Spinner, Badge, useColorModeValue, HStack } from "@chakra-ui/react";
 import { FaGavel, FaStore, FaHandshake } from "react-icons/fa";
 import { Link, useNavigate } from "react-router-dom";
 
@@ -9,6 +9,9 @@ export default function TransferLog({ refreshKey, participantId }) {
   const [loading, setLoading] = useState(true);
   const myParticipantId = 8; // Hardcodeado para demo, ideal: obtener del contexto de usuario
   const navigate = useNavigate();
+  const fallbackBg = useColorModeValue('gray.50','gray.700');
+  const fallbackBorder = useColorModeValue('gray.200','gray.600');
+  const playerColor = useColorModeValue('gray.800','gray.100');
 
   const fetchTransfers = () => {
     setLoading(true);
@@ -30,57 +33,40 @@ export default function TransferLog({ refreshKey, participantId }) {
 
   useEffect(() => {
     fetchTransfers();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshKey, participantId]);
 
-  const getColor = (type, fromName, toName, fromId, toId) => {
-    // Mercado a jugador (compra)
-    if (fromId == null && toId != null) {
-      if (String(toId) === String(myParticipantId)) {
-        // 3º De mercado a jugador (compra) (igual a id = 8): naranja oscuro
-        return { bg: "#ff9800", border: "4px solid #b45309", text: "white" };
-      } else {
-        // 1º De mercado a jugador (compra) (diferente de id = 8): naranjita claro
-        return { bg: "#ffe0b2", border: "4px solid #ffb347", text: "#b45309" };
-      }
+  // Reintroduce esquema granular original + ampliación (icono + intensidad + gradiente por cuantía)
+  const computeVisual = (t) => {
+    const { type, from_participant_id: fromId, to_participant_id: toId } = t;
+    const mineFrom = String(fromId) === String(myParticipantId);
+    const mineTo = String(toId) === String(myParticipantId);
+    const amount = t.amount || 0;
+    // Escala de intensidad por cuantía (tres niveles) usada para opacidad/gradient
+    const tier = amount >= 10000000 ? 'high' : amount >= 3000000 ? 'mid' : 'low';
+    const tierAlpha = tier==='high'? 0.25 : tier==='mid'? 0.18 : 0.12;
+    const gradient = (base)=> `linear-gradient(90deg, ${base}${Math.round(tierAlpha*255).toString(16).padStart(2,'0')} 0%, ${base}00 85%)`;
+
+    // Clausulas
+    if(type === 'clause'){
+      if(mineTo)   return { base:'#7c3aed', left:'#4c1d95', text:'white', weight:'bold', badge:'Clausulazo', icon:FaGavel, grad:gradient('#7c3aed')};
+      if(mineFrom) return { base:'#ffebee', left:'#c62828', text:'#b71c1c', weight:'bold', badge:'Clausulazo', icon:FaGavel, grad:gradient('#c62828')};
+      return { base:'#ede9fe', left:'#7c3aed', text:'#4c1d95', weight:'bold', badge:'Clausulazo', icon:FaGavel, grad:gradient('#7c3aed') };
     }
-    // Jugador a mercado (venta)
-    if (toId == null && fromId != null) {
-      if (String(fromId) === String(myParticipantId)) {
-        // 4º De mercado a jugador (venta) (igual a id = 8): azul oscuro
-        return { bg: "#1976d2", border: "4px solid #0d47a1", text: "white" };
-      } else {
-        // 2º De jugador a mercado (venta) (diferente de id = 8): azul claro
-        return { bg: "#bbdefb", border: "4px solid #1976d2", text: "#0d47a1" };
-      }
+    // Mercado implica null en uno de los lados
+    const isMarket = (fromId == null && toId != null) || (toId == null && fromId != null);
+    if(isMarket){
+      // Despriorizar: colores neutros, sin gradiente llamativo, peso normal
+      const neutral = { base:fallbackBg, left:fallbackBorder, text:playerColor, badge:'Mercado', icon:FaStore, grad:gradient('#a0aec0'), weight:'normal' };
+      return neutral;
     }
-    // Clausulazos
-    if (type === "clause") {
-      if (String(fromId) === String(myParticipantId)) {
-        // 10º de jugadorA clausulazo id=8 (rojito)
-        return { bg: "#ffebee", border: "4px solid #c62828", text: "#b71c1c", fontWeight: "bold" };
-      } else if (String(toId) === String(myParticipantId)) {
-        // 9º De id=8 clausulazo a jugadorA(morado y fuerte)
-        return { bg: "#7c3aed", border: "4px solid #4c1d95", text: "white", fontWeight: "bold" };
-      } else {
-        // Clausulazo entre otros
-        return { bg: "#ede9fe", border: "4px solid #7c3aed", text: "#4c1d95", fontWeight: "bold" };
-      }
+    // Traspasos entre jugadores (no clause)
+    if(fromId != null && toId != null){
+      if(mineTo)   return { base:'#c6f6d5', left:'#2f855a', text:'#22543d', weight:'bold', badge:'Entrada', icon:FaHandshake, grad:gradient('#2f855a')};
+      if(mineFrom) return { base:'#fffde7', left:'#fbc02d', text:'#f57c00', weight:'bold', badge:'Salida', icon:FaHandshake, grad:gradient('#fbc02d')};
+      return { base:'#e0e7ff', left:'#2563eb', text:'#1e3a8a', badge:'Acuerdo', icon:FaHandshake, grad:gradient('#2563eb') };
     }
-    // JugadorA a jugadorB
-    if (fromId != null && toId != null) {
-      if (String(fromId) === String(myParticipantId)) {
-        // 8º De id=8 a jugadorA(el color que quieras)
-        return { bg: "#fffde7", border: "4px solid #fbc02d", text: "#f57c00", fontWeight: "bold" };
-      } else if (String(toId) === String(myParticipantId)) {
-        // 6º De jugadorA a id=8(el mismo color de 5º pero más fuerte)
-        return { bg: "#c6f6d5", border: "4px solid #2f855a", text: "#22543d", fontWeight: "bold" };
-      } else {
-        // 5º De jugadorA a jugadorB(el color que quieras)
-        return { bg: "#e0e7ff", border: "4px solid #2563eb", text: "#1e3a8a" };
-      }
-    }
-    // Default
-    return { bg: "#f3f4f6", border: "4px solid #6b7280", text: "#111827" };
+    return { base:fallbackBg, left:fallbackBorder, text:playerColor, badge:'Transf.', icon:FaStore, grad:gradient('#718096') };
   };
 
   const participantLink = (id, name) => {
@@ -118,62 +104,31 @@ export default function TransferLog({ refreshKey, participantId }) {
         <Text textAlign="center" color="gray.400">No hay traspasos aún</Text>
       ) : (
         transfers.map((t) => {
-          const { bg, border, text } = getColor(t.type, t.from_name, t.to_name, t.from_participant_id, t.to_participant_id);
+          const style = computeVisual(t);
+          const Icon = style.icon;
+          const amount = t.amount || 0;
+          // Dot tipo
           return (
-            <Box key={t.id} mb={3} bg={bg} borderLeft={border} borderRadius="md" p={3}>
-              <Flex justify="space-between" mb={1}>
-                <Text fontWeight="bold" color={text}>
-                  {participantLink(t.from_participant_id, t.from_name)} → {participantLink(t.to_participant_id, t.to_name)}
-                </Text>
-                <Text fontSize="sm" color="gray.500">
-                  {(() => {
-                    // Clausulazo
-                    if (t.type === "clause") {
-                      return (
-                        <span title="Clausulazo" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                          <FaGavel style={{ color: '#7c3aed', fontSize: 18, marginRight: 4, verticalAlign: 'middle' }} />
-                          <b>Clausulazo</b>
-                          <span style={{ marginLeft: 8, fontWeight: 400 }}>
-                            {new Date(t.transfer_date).toLocaleDateString("es-ES")}
-                          </span>
-                        </span>
-                      );
-                    }
-                    // Mercado
-                    if ((t.from_participant_id == null && t.to_participant_id != null) || (t.to_participant_id == null && t.from_participant_id != null)) {
-                      return (
-                        <span title="Mercado" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                          <FaStore style={{ color: '#b45309', fontSize: 18, marginRight: 4, verticalAlign: 'middle' }} />
-                          <b>Mercado</b>
-                          <span style={{ marginLeft: 8, fontWeight: 400 }}>
-                            {new Date(t.transfer_date).toLocaleDateString("es-ES")}
-                          </span>
-                        </span>
-                      );
-                    }
-                    // Acuerdo entre jugadores (no clausulazo)
-                    if (t.from_participant_id != null && t.to_participant_id != null && t.type !== "clause") {
-                      return (
-                        <span title="Acuerdo" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                          <FaHandshake style={{ color: '#2563eb', fontSize: 18, marginRight: 4, verticalAlign: 'middle' }} />
-                          <b>Acuerdo</b>
-                          <span style={{ marginLeft: 8, fontWeight: 400 }}>
-                            {new Date(t.transfer_date).toLocaleDateString("es-ES")}
-                          </span>
-                        </span>
-                      );
-                    }
-                    // Default solo fecha
-                    return new Date(t.transfer_date).toLocaleDateString("es-ES");
-                  })()}
-                </Text>
+            <Box key={t.id} mb={3} p={3} borderRadius='md' position='relative' boxShadow='sm' bg={style.base} style={{ borderLeft:`4px solid ${style.left}` }} overflow='hidden'>
+              {/* Gradient overlay intensifica según cuantía */}
+              <Box position='absolute' inset={0} pointerEvents='none' opacity={0.9} style={{ background: style.grad }} />
+              <Flex position='relative' justify='space-between' mb={1} align='center'>
+                <HStack spacing={2} align='center'>
+                  <Box w='10px' h='10px' borderRadius='full' bg={style.left} boxShadow='0 0 0 2px rgba(0,0,0,0.15)' />
+                  {Icon && <Icon size={14} color={style.left} />}
+                  <Text fontWeight={style.weight || 'semibold'} color={style.text}>
+                    {participantLink(t.from_participant_id, t.from_name)} → {participantLink(t.to_participant_id, t.to_name)}
+                  </Text>
+                </HStack>
+                <Badge size='sm' variant='solid' bg={style.left} color={style.text.includes('#fff')||style.text==='white'? 'white':'white'} boxShadow='0 0 0 1px rgba(0,0,0,0.12)'>
+                  {style.badge}
+                </Badge>
               </Flex>
-              <Flex justify="space-between">
-                <Text color="gray.800">{t.player_name}</Text>
-                <Text fontWeight="bold">
-                  {t.amount.toLocaleString("es-ES")} €
-                </Text>
+              <Flex position='relative' justify='space-between' fontSize='xs' mb={1} color={style.text} opacity={0.9} fontFamily='mono'>
+                <Text>{new Date(t.transfer_date).toLocaleDateString('es-ES')}</Text>
+                <Text fontWeight='bold'>€{amount.toLocaleString('es-ES')}</Text>
               </Flex>
+              <Text position='relative' fontSize='sm' fontWeight='bold' color={style.text}>{t.player_name}</Text>
             </Box>
           );
         })

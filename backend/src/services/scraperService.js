@@ -1,11 +1,38 @@
-// src/services/scraper.js
+// src/services/scraperService.js
+/**
+ * Scraper Service
+ * ---------------
+ * Recolecta información externa (equipos y jugadores) desde fuentes web.
+ * Características destacadas:
+ *  - Concurrencia limitada mediante p-limit.
+ *  - Reintentos exponenciales en peticiones HTTP.
+ *  - Actualiza tablas: teams, players, player_market_history, player_points.
+ *  - Mantiene metadata "last_scraped".
+ *  - Extrae probabilidad de titularidad próxima jornada (0..1) si disponible.
+ *
+ * EXPORTS:
+ *  - scrapeTeams(): Actualiza clasificación y stats de equipos.
+ *  - scrapeAllMinimalPlayers(): Enriquecimiento masivo a partir de minimal_players.
+ *  - extractTitularNextJor($): Helper parseo porcentaje (test unitario).
+ */
 const axios = require("axios");
 const cheerio = require("cheerio");
 const db = require("../db/db");
-const pLimit = require("p-limit").default;
+// p-limit v3 (usada en package.json ^3.1.0) exporta directamente una función CommonJS.
+// Anteriormente se usaba ".default" provocando undefined y TypeError al invocar.
+let pLimit = require('p-limit');
+if (typeof pLimit !== 'function' && pLimit && typeof pLimit.default === 'function') {
+  // Compat (por si se actualiza a una versión ESM que expone default)
+  pLimit = pLimit.default;
+}
+if (typeof pLimit !== 'function') {
+  throw new Error('p-limit import failed: export no es una función. Revisa versión instalada.');
+}
 const scraperMetadataService = require("./scraperMetadataService");
 const http = require('http');
 const https = require('https');
+const logger = require('../logger');
+const { SCRAPER_CONCURRENCY, SCRAPER_LOG_TITULAR, SOURCES } = require('../config');
 
 // --- Optimización: instancia axios con keep-alive ---
 const httpAgent = new http.Agent({ keepAlive: true, maxSockets: 50 });
@@ -19,8 +46,24 @@ const axiosInstance = axios.create({
   }
 });
 
-// Concurrencia configurable
-const SCRAPER_CONCURRENCY = parseInt(process.env.SCRAPER_CONCURRENCY || '15', 10);
+// Interceptor de reintentos (hasta 3)
+axiosInstance.interceptors.response.use(r => r, async (error) => {
+  const cfg = error.config;
+  if(!cfg) throw error;
+  const retriable = !error.response || error.response.status >= 500 || ['ECONNRESET','ETIMEDOUT'].includes(error.code);
+  if(!retriable) throw error;
+  cfg.__retryCount = (cfg.__retryCount || 0) + 1;
+  if(cfg.__retryCount > 3) {
+    logger.warn(`Retries agotados para ${cfg.url}`);
+    throw error;
+  }
+  const backoff = 300 * Math.pow(2, cfg.__retryCount - 1); // 300,600,1200
+  logger.debug(`Retry ${cfg.__retryCount} en ${backoff}ms -> ${cfg.url}`);
+  await new Promise(r => setTimeout(r, backoff));
+  return axiosInstance(cfg);
+});
+
+// Concurrencia configurable (ya viene desde config)
 
 // 🔹 fecha mínima permitida
 const MIN_DATE = new Date("2025-08-21");
@@ -72,8 +115,8 @@ function extractTitularNextJor($) {
     if (m) percentText = m[0];
   }
   if (!percentText || !/%$/.test(percentText)) {
-    if (process.env.SCRAPER_LOG_TITULAR) {
-      console.log("[titular_next_jor] Contenedor encontrado pero sin porcentaje reconocible");
+    if (SCRAPER_LOG_TITULAR) {
+      logger.debug("[titular_next_jor] Contenedor encontrado pero sin porcentaje reconocible");
     }
     return null;
   }
@@ -91,7 +134,7 @@ async function loadTeamIdCache() {
       const map = new Map();
       for (const r of rows) map.set(r.slug, r.id);
       TEAM_ID_CACHE = map;
-      console.log(`🗂️ Cache teams cargada: ${rows.length} slugs`);
+  logger.info(`Cache teams cargada: ${rows.length} slugs`);
       res();
     });
   });
@@ -99,8 +142,11 @@ async function loadTeamIdCache() {
 
 /* -------------------------- SCRAPER DE EQUIPOS ------------------------- */
 async function scrapeTeams() {
-  console.log("🏆 Scrapeando clasificación de equipos...");
-  const url = "https://www.laliga.com/laliga-easports/clasificacion";
+  logger.info("Scrapeando clasificación de equipos...");
+  const url = SOURCES.TEAM_CLASSIFICATION_URL;
+  if (/example\.com/.test(url)) {
+    logger.warn('[scraper] TEAM_CLASSIFICATION_URL apunta a placeholder (example.com). Define variable de entorno para scraping real.');
+  }
 
   await new Promise((res, rej) => {
     db.run(
@@ -120,7 +166,7 @@ async function scrapeTeams() {
       (err) => (err ? rej(err) : res())
     );
   });
-  console.log("🧼 Columnas estadísticas reseteadas en teams");
+  logger.debug("Columnas estadísticas reseteadas en teams");
 
   try {
     const { data } = await axiosInstance.get(url);
@@ -189,10 +235,10 @@ async function scrapeTeams() {
           (err) => (err ? rej(err) : res())
         );
       });
-      console.log(`✅ ${t.name} (${t.shortName}) → PJ=${t.played}, Pts=${t.points}`);
+  logger.debug(`Team actualizado ${t.name} (${t.shortName}) PJ=${t.played} Pts=${t.points}`);
     }
 
-    console.log(`🏁 Clasificación equipos lista → ${teams.length} equipos actualizados`);
+  logger.info(`Clasificación equipos lista → ${teams.length} equipos actualizados`);
     return teams;
   } catch (e) {
     console.error(`❌ Error en scrapeTeams: ${e.message}`);
@@ -206,11 +252,11 @@ async function scrapeAllMinimalPlayers() {
     db.all("SELECT * FROM minimal_players", async (err, rows) => {
       if (err) return reject(err);
       if (!rows.length) {
-        console.log("⚠️ No hay jugadores en minimal_players");
+  logger.warn("No hay jugadores en minimal_players");
         return resolve([]);
       }
 
-      console.log(`📊 Jugadores a procesar: ${rows.length}`);
+  logger.info(`Jugadores a procesar: ${rows.length}`);
       await scrapeTeams();
       await loadTeamIdCache();
       const startTime = Date.now();
@@ -223,8 +269,11 @@ async function scrapeAllMinimalPlayers() {
 
       async function processPlayer(p) {
         const playerStart = Date.now();
-        console.log(`\n🔄 Procesando jugador: ${p.name} (${p.slug})`);
-        const url = `https://www.futbolfantasy.com/jugadores/${p.slug}`;
+  logger.debug(`Procesando jugador: ${p.name} (${p.slug})`);
+        const url = `${SOURCES.PLAYER_BASE_URL.replace(/\/$/, '')}/${p.slug}`;
+        if (/example\.com/.test(SOURCES.PLAYER_BASE_URL)) {
+          logger.warn('[scraper] PLAYER_BASE_URL placeholder; no se obtendrán datos reales.');
+        }
 
         try {
           const { data } = await axiosInstance.get(url);
@@ -269,7 +318,10 @@ async function scrapeAllMinimalPlayers() {
           let marketValue = null, delta = null, maxValue = null, minValue = null;
           let marketHistory = [];
           if (playerIdExternal) {
-            const analyticsUrl = `https://www.futbolfantasy.com/analytics/laliga-fantasy/mercado/detalle/${playerIdExternal}`;
+            const analyticsUrl = `${SOURCES.PLAYER_ANALYTICS_BASE_URL.replace(/\/$/, '')}/${playerIdExternal}`;
+            if (/example\.com/.test(SOURCES.PLAYER_ANALYTICS_BASE_URL)) {
+              logger.warn('[scraper] PLAYER_ANALYTICS_BASE_URL placeholder; histórico mercado vacío.');
+            }
             const { data: marketData } = await axiosInstance.get(analyticsUrl);
             const $m = cheerio.load(marketData);
 
@@ -301,7 +353,7 @@ async function scrapeAllMinimalPlayers() {
           }
 
           if (!marketValue) {
-            console.log(`⏭️ Saltando jugador sin market_value: ${p.name}`);
+            logger.debug(`Saltando sin market_value: ${p.name}`);
             stats.skippedNoMarket++;
             processed++;
             return;
@@ -318,8 +370,8 @@ async function scrapeAllMinimalPlayers() {
           }
 
           const titularNextJor = extractTitularNextJor($);
-          if (process.env.SCRAPER_LOG_TITULAR && titularNextJor === null) {
-            console.log(`[titular_next_jor] No porcentaje para ${p.slug}`);
+          if (SCRAPER_LOG_TITULAR && titularNextJor === null) {
+            logger.debug(`[titular_next_jor] No porcentaje para ${p.slug}`);
           }
 
           // === Puntos fantasy (incluye todas las jornadas, pasada y última)
@@ -387,7 +439,7 @@ async function scrapeAllMinimalPlayers() {
               await new Promise(r => stmtPoints.finalize(() => r()));
 
               await new Promise((res, rej) => db.run('COMMIT', err => err ? rej(err) : res()));
-              console.log(`✅ Jugador procesado correctamente: ${p.name} (${p.slug}) → ${existedBefore ? 'actualizado' : 'insertado'}`);
+              logger.info(`Jugador procesado: ${p.name} (${p.slug}) → ${existedBefore ? 'updated' : 'inserted'}`);
             } catch (errTx) {
               await new Promise(r => db.run('ROLLBACK', () => r()));
               throw errTx;
@@ -397,10 +449,10 @@ async function scrapeAllMinimalPlayers() {
           processed++;
           const dt = Date.now() - playerStart;
           if (processed % 25 === 0) {
-            console.log(`⏱️ Procesados ${processed}/${rows.length} (último ${dt}ms)`);
+            logger.debug(`Progreso ${processed}/${rows.length} (último ${dt}ms)`);
           }
         } catch (e) {
-          console.error(`❌ Error scraping ${p.name}: ${e.message}`);
+          logger.error(`Error scraping ${p.name}: ${e.message}`);
           stats.errors++;
           processed++;
         }
@@ -412,14 +464,14 @@ async function scrapeAllMinimalPlayers() {
       const totalMs = Date.now() - startTime;
       const avg = totalMs / rows.length;
       const perMin = (rows.length / (totalMs / 60000)).toFixed(1);
-      console.log(`⏲️ Tiempo total: ${totalMs} ms (~${avg.toFixed(1)} ms/jugador, ~${perMin} jugadores/min)`);
-      console.log('🔧 Ajusta SCRAPER_CONCURRENCY (variable entorno) para balancear velocidad vs bloqueos del sitio.');
+  logger.info(`Tiempo total: ${totalMs} ms (~${avg.toFixed(1)} ms/jugador, ~${perMin} jugadores/min)`);
+  logger.info('Ajusta SCRAPER_CONCURRENCY para balancear velocidad vs bloqueos.');
       console.table(stats);
       // Verificar total jugadores en tabla
       await new Promise((res, rej) => {
         db.get('SELECT COUNT(*) as total FROM players', (err, row) => {
           if (err) return rej(err);
-          console.log(`📦 Players en tabla ahora: ${row.total}`);
+          logger.info(`Players en tabla ahora: ${row.total}`);
           res();
         });
       });
@@ -428,7 +480,7 @@ async function scrapeAllMinimalPlayers() {
       await new Promise((res, rej) => {
         scraperMetadataService.setLastScraped(new Date().toISOString(), (err) => {
           if (err) return rej(err);
-          console.log("🕒 Metadata actualizada tras jugadores");
+          logger.info("Metadata actualizada tras jugadores");
           res();
         });
       });
@@ -441,4 +493,4 @@ async function scrapeAllMinimalPlayers() {
 
 
 
-module.exports = { scrapeAllMinimalPlayers, scrapeTeams };
+module.exports = { scrapeAllMinimalPlayers, scrapeTeams, extractTitularNextJor };

@@ -1,7 +1,8 @@
 import { useState, useMemo } from "react";
+import { Link as RouterLink } from 'react-router-dom';
 import ClauseLockModal from "../components/ClauseLockModal";
 import {
-  Input, HStack, IconButton, Text, Tooltip, Badge, Box
+  Input, HStack, IconButton, Text, Tooltip, Badge, Box, Link
 } from "@chakra-ui/react";
 import { DeleteIcon, EditIcon, TimeIcon } from "@chakra-ui/icons";
 
@@ -88,34 +89,53 @@ export default function EditablePlayerRow({ player, participantId, onChange, row
       <tr style={rowStyle}>
         {/* Nombre */}
         <td style={{ fontWeight: 500 }}>
-          <a
-            href={player.player_id ? `/players/${player.player_id}` : undefined}
-            style={{ color: "#2563eb", textDecoration: "none", fontWeight: 500 }}
-            target="_blank"
-            rel="noopener noreferrer"
-            onMouseOver={(e) => (e.currentTarget.style.textDecoration = "underline")}
-            onMouseOut={(e) => (e.currentTarget.style.textDecoration = "none")}
-          >
-            {player.name}
-          </a>
+          {player.player_id ? (
+            <Link
+              as={RouterLink}
+              to={`/players/${player.player_id}`}
+              color="blue.600"
+              fontWeight={500}
+              _hover={{ textDecoration: 'underline', color: 'blue.700' }}
+              _focus={{ boxShadow: 'outline' }}
+            >
+              {player.name}
+            </Link>
+          ) : player.name}
         </td>
 
         <td>{player.position}</td>
         <td>
-          {(player.team_slug || player.team_id) ? (
-            <a
-              href={player.team_slug ? `/teams/${player.team_slug}` : `/teams/${player.team_id}`}
-              style={{ color: "#059669", textDecoration: "none", fontWeight: 500, cursor: "pointer" }}
-              target="_blank"
-              rel="noopener noreferrer"
-              onMouseOver={e => (e.currentTarget.style.textDecoration = "underline")}
-              onMouseOut={e => (e.currentTarget.style.textDecoration = "none")}
-            >
-              {player.team}
-            </a>
-          ) : (
-            player.team
-          )}
+          {(() => {
+            const slugify = (str) => str
+              ? str.toString()
+                  .toLowerCase()
+                  .normalize('NFD') // separa acentos
+                  .replace(/[\u0300-\u036f]/g, '') // quita diacríticos
+                  .replace(/[^a-z0-9]+/g, '-')
+                  .replace(/^-+|-+$/g, '')
+              : '';
+            const teamLinkTarget = player.team_slug
+              ? `/teams/${player.team_slug}`
+              : player.team_id
+                ? `/teams/${player.team_id}`
+                : player.team
+                  ? `/teams/${slugify(player.team)}`
+                  : null;
+            if (!player.team) return null;
+            if (!teamLinkTarget) return player.team;
+            return (
+              <Link
+                as={RouterLink}
+                to={teamLinkTarget}
+                color="green.600"
+                fontWeight={500}
+                _hover={{ textDecoration: 'underline', color: 'green.700' }}
+                _focus={{ boxShadow: 'outline' }}
+              >
+                {player.team}
+              </Link>
+            );
+          })()}
         </td>
 
         {/* Valor mercado */}

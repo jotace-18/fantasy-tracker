@@ -1,3 +1,8 @@
+// resetMoney.js
+// -------------------------------------------------------------
+// Setea a 0 el saldo (money) de todos los participantes.
+// Uso: node scripts/resetMoney.js
+// Irreversible salvo backup previo.
 const sqlite3 = require("sqlite3").verbose();
 const path = require("path");
 

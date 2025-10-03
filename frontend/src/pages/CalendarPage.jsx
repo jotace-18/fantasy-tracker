@@ -97,6 +97,8 @@ export default function CalendarPage() {
             jornadaRefs[idx] = jornadaRefs[idx] || React.createRef();
             // Color para la jornada actual
             const isActual = idx === actualIdx;
+            const cierreDate = jornada.fecha_cierre ? new Date(jornada.fecha_cierre) : null;
+            const isClosed = cierreDate && cierreDate <= now;
             const bgGradient = isActual
               ? "linear(to-br, green.100, green.50)"
               : "linear(to-br, blue.100, blue.50)";
@@ -133,9 +135,15 @@ export default function CalendarPage() {
                       />
                     </HStack>
                     {jornada.fecha_cierre ? (
-                      <Badge colorScheme={badgeColor} fontSize="sm" px={3} py={1} borderRadius="md">
-                        Cierra: {new Date(jornada.fecha_cierre).toLocaleString("es-ES", { dateStyle: "short", timeStyle: "short" })}
-                      </Badge>
+                      isClosed ? (
+                        <Badge colorScheme="red" fontSize="sm" px={3} py={1} borderRadius="md">
+                          Cerró: {cierreDate.toLocaleString("es-ES", { dateStyle: "short", timeStyle: "short" })}
+                        </Badge>
+                      ) : (
+                        <Badge colorScheme={badgeColor} fontSize="sm" px={3} py={1} borderRadius="md">
+                          Cierra: {cierreDate.toLocaleString("es-ES", { dateStyle: "short", timeStyle: "short" })}
+                        </Badge>
+                      )
                     ) : (
                       <Badge colorScheme="yellow" fontSize="sm" px={3} py={1} borderRadius="md">Cierre desconocido</Badge>
                     )}
