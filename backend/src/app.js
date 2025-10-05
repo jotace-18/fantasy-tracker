@@ -20,6 +20,7 @@ const scraperMetadataRoutes = require('./routes/scraperMetadataRoutes');
 const transfersRoutes = require('./routes/transferRoutes');
 const calendarRoutes = require('./routes/calendarRoutes');
 const clockRoutes = require('./routes/clockRoutes');
+const { scheduleAutoUnlock } = require('./services/clauseService');
 const marketRoutes = require('./routes/marketRoutes');
 const matchResultsRoutes = require('./routes/matchResultsRoutes');
 
@@ -124,3 +125,11 @@ app.use((req,res)=>{ res.status(404).json({ error:'Ruta no encontrada' }); });
 app.use((err,req,res,_next)=>{ logger.error('Error interno', err.stack); res.status(500).json({ error:'Error interno del servidor' }); });
 
 module.exports = app;
+
+// Iniciar tareas en background poco intrusivas tras exportar la app
+// Nota: en tests, el proceso es efímero; esto no debería interferir.
+try {
+  scheduleAutoUnlock(60_000); // cada 60s
+} catch (err) {
+  console.error('[clause] No se pudo iniciar el auto-unlock:', err?.message || err);
+}
