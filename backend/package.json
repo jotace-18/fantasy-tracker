@@ -32,27 +32,33 @@
     "cheerio": "^1.1.0",
     "cors": "^2.8.5",
     "csv-parse": "^6.1.0",
-    "dotenv": "^17.2.2",
+    "dotenv": "^17.2.3",
     "express": "^4.19.2",
-  "p-limit": "^3.1.0",
+    "p-limit": "^3.1.0",
     "sqlite3": "^5.1.7"
   },
   "devDependencies": {
     "jest": "^29.7.0",
-    "supertest": "^7.1.1",
+    "jest-junit": "^16.0.0",
     "nodemon": "^3.1.10",
-    "jest-junit": "^16.0.0"
+    "supertest": "^7.1.1"
   },
   "jest": {
     "testEnvironment": "node",
-    "roots": ["<rootDir>/tests"],
-    "setupFiles": ["<rootDir>/tests/setupPreEnv.js"],
+    "roots": [
+      "<rootDir>/tests"
+    ],
+    "setupFiles": [
+      "<rootDir>/tests/setupPreEnv.js"
+    ],
     "collectCoverageFrom": [
       "src/**/*.js",
       "!src/index.js",
       "!src/logger.js"
     ],
-    "setupFilesAfterEnv": ["<rootDir>/tests/setupLogging.js"],
+    "setupFilesAfterEnv": [
+      "<rootDir>/tests/setupLogging.js"
+    ],
     "coverageThreshold": {
       "global": {
         "branches": 25,
