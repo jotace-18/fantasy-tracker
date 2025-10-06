@@ -2,34 +2,46 @@ const sqlite3 = require("sqlite3").verbose();
 const path = require("path");
 const fs = require("fs");
 
-// Permite sobreescribir la ruta de la BD (tests pueden usar copia temporal)
+// Permite sobreescribir la ruta de la BD (por entorno, como en Docker)
 const overridePath = process.env.DB_PATH;
 let dbPath;
+
 if (overridePath) {
+  // Si viene por entorno (Docker), usamos esa ruta directamente
   dbPath = path.resolve(overridePath);
-  const dir = path.dirname(dbPath);
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  console.log(`[DB] Usando base de datos externa: ${dbPath}`);
 } else {
+  // Si no, usamos la ruta local por defecto (modo desarrollo local)
   const dbDir = path.resolve(__dirname, "../../db");
   if (!fs.existsSync(dbDir)) fs.mkdirSync(dbDir, { recursive: true });
   dbPath = path.join(dbDir, "fantasy.sqlite");
+  console.log(`[DB] Usando base de datos local: ${dbPath}`);
 }
 
+// Conexión a SQLite (lectura y escritura)
 const db = new sqlite3.Database(
   dbPath,
   sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE,
   (err) => {
     if (err) {
-      console.error("[DB] Error abriendo BD:", err);
-      process.exit(1);
+      console.error("[DB] ❌ Error abriendo la base de datos:", err.message);
+      // En Docker no queremos matar el proceso si el volumen aún no está listo
+      if (process.env.NODE_ENV === "production" || process.env.DOCKER_ENV) {
+        console.warn("[DB] ⚠️ Continuando sin conexión a BD (modo degradado)");
+      } else {
+        process.exit(1);
+      }
+    } else {
+      console.log("✅ Conectado correctamente a la base de datos SQLite");
     }
   }
 );
-// Añadir timeout para evitar SQLITE_BUSY
-db.run('PRAGMA busy_timeout = 5000;'); // Espera hasta 5 segundos si la base está bloqueada
 
+// Añadir timeout para evitar SQLITE_BUSY
+db.run("PRAGMA busy_timeout = 5000;"); // Espera hasta 5 segundos si la base está bloqueada
+
+// Creación de tablas mínimas si no existen
 db.serialize(() => {
-  // Tabla mínima de equipos
   db.run(`
     CREATE TABLE IF NOT EXISTS teams (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -37,7 +49,6 @@ db.serialize(() => {
     )
   `);
 
-  // Crear de nuevo con todos los campos necesarios
   db.run(`
     CREATE TABLE IF NOT EXISTS players (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -55,9 +66,6 @@ db.serialize(() => {
     )
   `);
 
-  
-
-  // Crear tabla de puntos (si no existe)
   db.run(`
     CREATE TABLE IF NOT EXISTS player_points (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -71,16 +79,16 @@ db.serialize(() => {
   `);
 
   db.run(`
-  CREATE TABLE IF NOT EXISTS minimal_players (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL,
-    slug TEXT UNIQUE NOT NULL,
-    team TEXT NOT NULL,
-    position TEXT
-  )
-`);
+    CREATE TABLE IF NOT EXISTS minimal_players (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      slug TEXT UNIQUE NOT NULL,
+      team TEXT NOT NULL,
+      position TEXT
+    )
+  `);
 
-db.run(`
+  db.run(`
     CREATE TABLE IF NOT EXISTS player_market_history (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       player_id INTEGER NOT NULL,
@@ -92,8 +100,6 @@ db.run(`
       UNIQUE(player_id, date)
     )
   `);
-
-
 });
 
 module.exports = db;

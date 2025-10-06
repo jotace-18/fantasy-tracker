@@ -24,6 +24,9 @@ const { scheduleAutoUnlock } = require('./services/clauseService');
 const marketRoutes = require('./routes/marketRoutes');
 const matchResultsRoutes = require('./routes/matchResultsRoutes');
 
+// Capa de analisis
+const analyticsRoutes = require('./routes/analyticsRoutes');
+
 // DB y modelos para healthcheck
 const db = require('./db/db');
 const { getLastScraped } = require('./models/scraperMetadataModel');
@@ -49,6 +52,9 @@ app.use('/api/match-results', matchResultsRoutes);
 app.use('/api/market', marketRoutes);
 app.use('/api/scraper-metadata', scraperMetadataRoutes);
 app.use('/api/transfers', transfersRoutes);
+
+// Rutas de analítica
+app.use('/api/analytics', analyticsRoutes);
 
 // OpenAPI spec JSON
 app.get('/api/openapi.json', (req,res)=>{ res.json(openapi); });

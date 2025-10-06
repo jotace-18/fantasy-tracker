@@ -1,0 +1,41 @@
+services:
+  backend:
+    build: ./backend
+    container_name: fantasy_backend
+    ports:
+      - "4000:4000"
+    volumes:
+      - ./backend:/app
+      - ./backend/db/fantasy.sqlite:/data/fantasy.sqlite
+    environment:
+      - NODE_ENV=development
+      - DB_PATH=/data/fantasy.sqlite
+      - ANALYTICS_URL=http://analytics:5000
+    command: ["npm", "run", "dev"]
+
+  frontend:
+    build: ./frontend
+    container_name: fantasy_frontend
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+    environment:
+      - NODE_ENV=development
+      - VITE_DOCKER=true
+    command: ["npm", "run", "dev"]
+    depends_on:
+      - backend
+
+
+  analytics:
+    build: ./analytics_service
+    container_name: fantasy_analytics
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./backend/db/fantasy.sqlite:/data/fantasy.sqlite
+    environment:
+      - DB_PATH=/data/fantasy.sqlite
+
+
