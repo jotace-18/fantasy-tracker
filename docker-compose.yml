@@ -6,6 +6,7 @@ services:
       - "4000:4000"
     volumes:
       - ./backend:/app
+      - /app/node_modules           
       - ./backend/db/fantasy.sqlite:/data/fantasy.sqlite
     environment:
       - NODE_ENV=development
@@ -20,13 +21,13 @@ services:
       - "5173:5173"
     volumes:
       - ./frontend:/app
+      - /app/node_modules           
     environment:
       - NODE_ENV=development
       - VITE_DOCKER=true
     command: ["npm", "run", "dev"]
     depends_on:
       - backend
-
 
   analytics:
     build: ./analytics_service
@@ -37,5 +38,3 @@ services:
       - ./backend/db/fantasy.sqlite:/data/fantasy.sqlite
     environment:
       - DB_PATH=/data/fantasy.sqlite
-
-

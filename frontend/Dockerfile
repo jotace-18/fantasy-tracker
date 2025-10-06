@@ -1,5 +1,5 @@
 # ---------- FRONTEND ----------
-    FROM node:20-slim
+    FROM node:20
 
     WORKDIR /app
     
