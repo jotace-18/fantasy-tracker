@@ -1,0 +1,7 @@
+{
+  "watch": ["src", "migrations"],
+  "ext": "js,json",
+  "ignore": ["db/*.sqlite"],
+  "exec": "node src/index.js",
+  "legacyWatch": true
+}

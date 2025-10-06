@@ -13,6 +13,7 @@ import LeaderboardPage from "../pages/LeaderboardPage";
 import CalendarPage from "../pages/CalendarPage";
 import ParticipantProfilePage from "../pages/ParticipantProfilePage";
 import MarketPage from "../pages/MarketPage";
+import RecommendationsPage from "../pages/RecommendationsPage";
 
 export default function AppRouter() {
   return (
@@ -30,6 +31,7 @@ export default function AppRouter() {
           <Route path="/calendar" element={<CalendarPage />} />
           <Route path="/participants/:id" element={<ParticipantProfilePage />} />
           <Route path="/market" element={<MarketPage />} />
+          <Route path="/recommendations" element={<RecommendationsPage />} />
   </Routes>
       </Layout>
     </BrowserRouter>

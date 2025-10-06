@@ -2,17 +2,21 @@ services:
   backend:
     build: ./backend
     container_name: fantasy_backend
+    working_dir: /app
     ports:
       - "4000:4000"
     volumes:
       - ./backend:/app
-      - /app/node_modules           
+      - /app/node_modules
       - ./backend/db/fantasy.sqlite:/data/fantasy.sqlite
     environment:
       - NODE_ENV=development
       - DB_PATH=/data/fantasy.sqlite
       - ANALYTICS_URL=http://analytics:5000
+      - CHOKIDAR_USEPOLLING=true
+      - CHOKIDAR_INTERVAL=300 
     command: ["npm", "run", "dev"]
+
 
   frontend:
     build: ./frontend

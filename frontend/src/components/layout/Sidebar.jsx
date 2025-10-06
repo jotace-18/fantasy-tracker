@@ -13,6 +13,7 @@ export default function Sidebar() {
     { to: "/leaderboard", label: "Leaderboard" },
     { to: "/calendar", label: "Calendario" },
     { to: "/market", label: "Mercado Diario" },
+    { to: "/recommendations", label: "Recomendaciones" },
   ];
 
   return (

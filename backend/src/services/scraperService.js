@@ -303,13 +303,46 @@ async function scrapeAllMinimalPlayers() {
             }
           });
 
-          // === Riesgo de lesión
-          let riskLevel = null;
-          const riskDiv = $("div[class*='riesgo-lesion']").first();
-          if (riskDiv.length) {
-            const match = (riskDiv.attr("class") || "").match(/riesgo-lesion-(\d+)/);
-            if (match) riskLevel = parseInt(match[1], 10);
+          // === Estado físico / riesgo de lesión detallado ===
+          let lesionado = 0;
+          let riskLevel = 0;
+          let lesionComment = null;
+
+          // 🔴 Grave lesión (cuadro con clase lesionado)
+          const divLesionado = $("div.cuadro.lesionado, div.block-new.lesionado").first();
+          if (divLesionado.length > 0) {
+            lesionado = 1;
+            riskLevel = 5;
+            lesionComment = divLesionado.find("span.lesion").text().trim() || "Lesión";
           }
+
+          // 🟡 Duda / molestias
+          else if ($("div.cuadro.duda, div.block-new.duda").length > 0) {
+            lesionado = 0;
+            riskLevel = 3;
+            lesionComment = $("div.cuadro.duda span.lesion").first().text().trim() || "Molestias";
+          }
+
+          // 🟢 Contusión leve / disponible parcial
+          else if ($("div.block-new img[src*='disponible_box_min.png']").length > 0) {
+            lesionado = 0;
+            riskLevel = 2;
+            lesionComment = $("div.block-new span.lesion").first().text().trim() || "Contusión leve";
+          }
+
+          // ✅ Disponible total
+          else if ($("div.alturalesionfix .disponible").length > 0) {
+            lesionado = 0;
+            riskLevel = 0;
+            lesionComment = "Disponible para competir";
+          }
+
+          // 🧩 Guardar los campos extra
+          if (!riskLevel && p.risk_level != null) {
+            riskLevel = p.risk_level; // fallback al valor original si existía
+          }
+
+
 
           // === team_id
           const teamId = TEAM_ID_CACHE.get(p.team) || null;
@@ -363,26 +396,71 @@ async function scrapeAllMinimalPlayers() {
 
           // (Ya extraído antes del INSERT)
 
-          // === Lesionado (por defecto no)
-          let lesionado = 0;
-          if ($("div.cuadro.lesionado").length > 0) {
-            lesionado = 1;
-          }
+          
 
           const titularNextJor = extractTitularNextJor($);
           if (SCRAPER_LOG_TITULAR && titularNextJor === null) {
             logger.debug(`[titular_next_jor] No porcentaje para ${p.slug}`);
           }
 
-          // === Puntos fantasy (incluye todas las jornadas, pasada y última)
+          // === Puntos fantasy (incluye jugadas y no jugadas)
           const fantasyPoints = [];
+
           $("tr").each((_, el) => {
-            const jornada = $(el).find("td.jorn-td").text().trim();
-            const points = $(el).find("td.data.points .laliga-fantasy").first().text().trim();
-            if (jornada && points) {
-              fantasyPoints.push({ jornada: Number(jornada), puntos: Number(points) });
+            const $row = $(el);
+            const jornadaText = $row.find("td.jorn-td").text().trim();
+            if (!jornadaText) return;
+
+            const jornada = Number(jornadaText);
+            let points = null;
+
+            // 1️⃣ Buscar puntuación numérica
+            const pointsText = $row.find("td.data.points .laliga-fantasy").first().text().trim();
+            if (pointsText && !isNaN(pointsText)) {
+              points = Number(pointsText);
             }
+
+            // 2️⃣ Si no hay puntuación visible, analizamos la causa
+            if (points === null) {
+              const html = $row.html()?.toLowerCase() || "";
+
+              const isLesionado =
+                $row.hasClass("injured") ||
+                html.includes("lesionado_box_min") ||
+                html.includes("lesionado");
+
+              const isNoConvocado =
+                $row.hasClass("not_played") &&
+                (html.includes("no convocado") || html.includes("sancionado"));
+
+              const isConvocadoNoJugo =
+                $row.hasClass("not_played") &&
+                (html.includes("convocado, no jugó") || html.includes("convocado pero no jugó"));
+
+              // 🩹 Lesionado o no convocado → no registrar jornada
+              if (isLesionado || isNoConvocado) {
+                logger.debug(`[scraper] Jornada ${jornada}: lesionado o no convocado → no se contabiliza`);
+                return;
+              }
+
+              // 🪑 Convocado pero no jugó → registrar 0 puntos
+              if (isConvocadoNoJugo) {
+                points = 0;
+                logger.debug(`[scraper] Jornada ${jornada}: convocado no jugó → 0 pts`);
+              }
+            }
+
+            // 3️⃣ Si no hay puntos ni condición, ignorar
+            if (points === null) return;
+
+            fantasyPoints.push({
+              jornada,
+              puntos: points
+            });
           });
+
+
+
 
           // Persistencia serializada para evitar conflictos de BEGIN
           await limitDb(async () => {
@@ -430,13 +508,21 @@ async function scrapeAllMinimalPlayers() {
               }
               await new Promise(r => stmtHistory.finalize(() => r()));
 
-              const stmtPoints = db.prepare(`INSERT INTO player_points (player_id, jornada, points)
+              // Guardar puntos fantasy (limpieza previa)
+              await new Promise((res, rej) => {
+                db.run('DELETE FROM player_points WHERE player_id = ?', [playerIdDb], err => err ? rej(err) : res());
+              });
+
+              const stmtPoints = db.prepare(`
+                INSERT INTO player_points (player_id, jornada, points)
                 VALUES (?, ?, ?)
-                ON CONFLICT(player_id, jornada) DO UPDATE SET points=excluded.points`);
+                ON CONFLICT(player_id, jornada) DO UPDATE SET points = excluded.points
+              `);
               for (const fp of fantasyPoints) {
                 await new Promise((res, rej) => stmtPoints.run(playerIdDb, fp.jornada, fp.puntos, err => err ? rej(err) : res()));
               }
               await new Promise(r => stmtPoints.finalize(() => r()));
+
 
               await new Promise((res, rej) => db.run('COMMIT', err => err ? rej(err) : res()));
               logger.info(`Jugador procesado: ${p.name} (${p.slug}) → ${existedBefore ? 'updated' : 'inserted'}`);
