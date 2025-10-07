@@ -94,7 +94,9 @@ function updateClauseLock(req, res) {
   days = Number(days) || 0;
   hours = Number(hours) || 0;
   const totalMs = (days * 24 + hours) * 60 * 60 * 1000;
-  const clause_lock_until = new Date(Date.now() + totalMs).toISOString();
+  // Guardar como formato compatible con SQLite datetime ('YYYY-MM-DD HH:MM:SS')
+  const iso = new Date(Date.now() + totalMs).toISOString();
+  const clause_lock_until = iso.replace('T', ' ').slice(0, 19);
   console.log(`[DEBUG] PATCH /clause-lock: participant_id=${id}, player_id=${playerId}, days=${days}, hours=${hours}, clause_lock_until=${clause_lock_until}`);
   service.updateClauseLock(id, playerId, clause_lock_until, (err, result) => {
     if (err) return res.status(400).json({ error: err.message });

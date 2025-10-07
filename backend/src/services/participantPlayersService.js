@@ -21,16 +21,23 @@ function fetchTeam(participantId, cb) {
     // Buscar jugadores con lock expirado y no actualizados
     const updates = [];
     for (const row of rows) {
-      if (row.clause_lock_until && row.clausulable_now && (!row.is_clausulable || row.clause_value !== row.market_value_num)) {
+      // 1) Auto-unlock: si el lock expiró y sigue marcado como no clausulable, activarlo
+      if (row.clause_lock_until && row.clausulable_now && !row.is_clausulable) {
         updates.push(new Promise((resolve) => {
-          participantPlayersModel.updateClausulable(participantId, row.player_id, true, () => {
-            participantPlayersModel.updateClauseValue(participantId, row.player_id, row.market_value_num, () => {
-              resolve();
-            });
-          });
+          participantPlayersModel.updateClausulable(participantId, row.player_id, 1, () => resolve());
         }));
         row.is_clausulable = 1;
-        row.clause_value = row.market_value_num;
+      }
+
+      // 2) Piso de cláusula: nunca menor que el valor de mercado actual
+      if (row.clause_value != null && row.market_value_num != null) {
+        const clauseNum = Number(row.clause_value) || 0;
+        if (clauseNum < row.market_value_num) {
+          updates.push(new Promise((resolve) => {
+            participantPlayersModel.updateClauseValue(participantId, row.player_id, row.market_value_num, () => resolve());
+          }));
+          row.clause_value = row.market_value_num;
+        }
       }
     }
     if (updates.length > 0) {

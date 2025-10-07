@@ -10,6 +10,12 @@ export default defineConfig({
   server: {
     host: '0.0.0.0',
     port: 5173,
+    watch: {
+      usePolling: true,
+    },
+    hmr: {
+      clientPort: 5173,
+    },
     proxy: {
       '/api': {
         target: isDocker ? 'http://backend:4000' : 'http://localhost:4000',
@@ -17,4 +23,5 @@ export default defineConfig({
       },
     },
   },
+
 })

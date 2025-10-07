@@ -183,17 +183,29 @@ function updateClauseLock(participant_id, player_id, clause_lock_until, cb) {
  * @param {function(Error, Object=)} cb - Callback con (error, {changes}).
  */
 function updateClauseValue(participant_id, player_id, clause_value, cb) {
-  // console.log(`[DEBUG][MODEL] updateClauseValue: participant_id=${participant_id}, player_id=${player_id}, clause_value=${clause_value}`);
-  db.run(
-    `UPDATE participant_players 
-     SET clause_value = ? 
-     WHERE participant_id = ? AND player_id = ?`,
-    [clause_value, participant_id, player_id],
-    function (err) {
-      // console.log(`[DEBUG][MODEL] updateClauseValue result: err=`, err, 'changes=', this.changes);
-      if (typeof cb === "function") cb(err, { changes: this.changes });
-    }
-  );
+  // Garantiza que clause_value nunca quede por debajo del valor de mercado actual
+  // Nota: El valor de mercado se almacena como string con separadores, lo convertimos a INTEGER
+  const sql = `
+    UPDATE participant_players
+    SET clause_value = (
+      CASE
+        WHEN ? < (
+          SELECT CAST(REPLACE(REPLACE(p.market_value, '.', ''), ',', '') AS INTEGER)
+          FROM players p
+          WHERE p.id = participant_players.player_id
+        ) THEN (
+          SELECT CAST(REPLACE(REPLACE(p.market_value, '.', ''), ',', '') AS INTEGER)
+          FROM players p
+          WHERE p.id = participant_players.player_id
+        )
+        ELSE ?
+      END
+    )
+    WHERE participant_id = ? AND player_id = ?
+  `;
+  db.run(sql, [clause_value, clause_value, participant_id, player_id], function (err) {
+    if (typeof cb === "function") cb(err, { changes: this.changes });
+  });
 }
 
 /**

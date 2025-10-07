@@ -5,6 +5,8 @@
  * Desbloquea automáticamente las cláusulas cuyo lock haya expirado
  * (clause_lock_until <= now), marcando is_clausulable = 1 y
  * reseteando clause_value al valor de mercado numérico actual.
+ * Además, alinea todas las cláusulas para que nunca queden por debajo
+ * del valor de mercado vigente.
  */
 
 const db = require("../db/db");
@@ -43,23 +45,63 @@ function unlockExpiredClauses() {
 }
 
 /**
+ * Alinea todas las cláusulas con el valor de mercado, elevando aquellas
+ * cuyo clause_value sea inferior al market_value_num actual.
+ */
+function floorClausesToMarket() {
+  return new Promise((resolve, reject) => {
+    const sql = `
+      UPDATE participant_players AS pp
+      SET clause_value = (
+        SELECT CAST(REPLACE(REPLACE(p.market_value, '.', ''), ',', '') AS INTEGER)
+        FROM players p
+        WHERE p.id = pp.player_id
+      )
+      WHERE EXISTS (
+        SELECT 1 FROM players p
+        WHERE p.id = pp.player_id
+          AND pp.clause_value IS NOT NULL
+          AND pp.clause_value < CAST(REPLACE(REPLACE(p.market_value, '.', ''), ',', '') AS INTEGER)
+      );
+    `;
+    db.run(sql, [], function (err) {
+      if (err) return reject(err);
+      resolve(this.changes || 0);
+    });
+  });
+}
+
+/**
  * Programa una tarea periódica para ejecutar unlockExpiredClauses.
  * @param {number} intervalMs - Intervalo de ejecución en ms. Por defecto, 60s.
  * @returns {NodeJS.Timer}
  */
 function scheduleAutoUnlock(intervalMs = 60_000) {
   const timer = setInterval(() => {
+    // 0) Normaliza formato de fechas (ISO con 'T' -> 'YYYY-MM-DD HH:MM:SS')
+    db.run(
+      `UPDATE participant_players
+       SET clause_lock_until = REPLACE(SUBSTR(clause_lock_until,1,19),'T',' ')
+       WHERE clause_lock_until LIKE '%T%';`
+    , [], function(_err){ /* best-effort, ignoramos error aquí */ });
+    // 1) Desbloquea expirados y 2) eleva cláusulas por debajo del mercado
     unlockExpiredClauses()
-      .then((changes) => {
-        if (changes > 0) {
-          console.log(`[clause] Auto-unlock aplicado a ${changes} filas`);
+      .then((unlocks) => {
+        if (unlocks > 0) {
+          console.log(`[clause] Auto-unlock aplicado a ${unlocks} filas`);
+        }
+        return floorClausesToMarket();
+      })
+      .then((floors) => {
+        if (floors > 0) {
+          console.log(`[clause] Clausulas elevadas a mercado en ${floors} filas`);
         }
       })
       .catch((err) => {
-        console.error("[clause] Error en auto-unlock:", err.message);
+        console.error("[clause] Error en tarea de cláusulas:", err.message);
       });
   }, intervalMs);
   return timer;
 }
 
-module.exports = { unlockExpiredClauses, scheduleAutoUnlock };
+module.exports = { unlockExpiredClauses, floorClausesToMarket, scheduleAutoUnlock };

@@ -85,7 +85,30 @@ function create(transfer, cb) {
     `🔄 Proceso: seller=${sellerId || "Mercado"}, buyer=${buyerId || "Mercado"}, amount=${amount}`
   );
 
-  updateMoney(buyerId, -amount, (err) => {
+  // Si es transferencia entre participantes (no mercado), validar que el precio no esté por debajo del mercado
+  const precheck = () => {
+    if (sellerId && buyerId) {
+      const playersModel = require("../models/playersModel");
+      return playersModel.findPlayerById(player_id).then((player) => {
+        const marketValue = (player && player.market) ? player.market.current : undefined;
+        let marketValueNum = 0;
+        if (typeof marketValue === "string") {
+          marketValueNum = parseInt(String(marketValue).replace(/\D/g, ""), 10) || 0;
+        } else if (typeof marketValue === "number") {
+          marketValueNum = marketValue;
+        }
+        if (marketValueNum > 0 && amount < marketValueNum) {
+          throw new Error(
+            `No se permite vender por debajo del valor de mercado entre participantes (mercado actual: ${marketValueNum}, amount: ${amount})`
+          );
+        }
+      });
+    }
+    return Promise.resolve();
+  };
+
+  precheck().then(() => {
+    updateMoney(buyerId, -amount, (err) => {
     if (err) return cb(err);
 
     updateMoney(sellerId, amount, (err2) => {
@@ -94,32 +117,13 @@ function create(transfer, cb) {
       movePlayer(player_id, sellerId, buyerId, amount, (err3) => {
         if (err3) return cb(err3);
 
-        // Si se vende al mercado (buyerId null), resetear cláusula al valor de mercado
+        // Si se vende al mercado (buyerId null), opcionalmente resetear cláusula
         const resetClauseIfSoldToMarket = (done) => {
           if (!buyerId) {
-            // Buscar valor de mercado actual
-            const playersModel = require("../models/playersModel");
-            playersModel.findPlayerById(player_id).then((player) => {
-              const marketValue = player?.market?.current;
-              let marketValueNum = 0;
-              if (typeof marketValue === "string") {
-                marketValueNum = parseInt(marketValue.replace(/\D/g, ""), 10) || 0;
-              } else if (typeof marketValue === "number") {
-                marketValueNum = marketValue;
-              }
-              db.run(
-                `UPDATE participant_players SET clause_value = ? WHERE player_id = ?`,
-                [marketValueNum, player_id],
-                function (errClause) {
-                  if (errClause) {
-                    console.error("❌ Error reseteando valor de cláusula al vender al mercado:", errClause.message);
-                  } else {
-                    console.log(`💶 Valor de cláusula reseteado a valor de mercado (${marketValueNum})`);
-                  }
-                  done();
-                }
-              );
-            });
+            // Al vender al mercado, simplemente se elimina la relación del vendedor,
+            // por tanto no hay cláusula activa asociada a ningún participante.
+            // No es necesario actualizar clause_value en participant_players aquí.
+            return done();
           } else {
             done();
           }
@@ -130,16 +134,16 @@ function create(transfer, cb) {
 
           console.log("📑 Transfer guardado en tabla transfers:", result);
 
-          // Si es traspaso por cláusula, actualizar el valor de la cláusula al nuevo precio
+          // Tras comprar (buy o clause), el valor de la cláusula pasa a ser el precio de compra
           const updateClauseIfNeeded = (done) => {
-            if (type === "clause" && buyerId) {
-              const sqlClause = `UPDATE participant_players SET clause_value = ? WHERE participant_id = ? AND player_id = ?`;
-              db.run(sqlClause, [amount, buyerId, player_id], function (errClause) {
+            if (buyerId) {
+              const participantPlayersModel = require("../models/participantPlayersModel");
+              participantPlayersModel.updateClauseValue(buyerId, player_id, amount, (errClause) => {
                 if (errClause) {
                   console.error("❌ Error actualizando valor de cláusula:", errClause.message);
                   return done(errClause);
                 }
-                console.log(`💶 Valor de cláusula actualizado a ${amount}`);
+                console.log(`💶 Valor de cláusula actualizado a precio de compra (con piso mercado) ${amount}`);
                 done();
               });
             } else {
@@ -198,6 +202,7 @@ function create(transfer, cb) {
       });
     });
   });
+  }).catch((e) => cb(e));
 }
 
 function list(cb) {
