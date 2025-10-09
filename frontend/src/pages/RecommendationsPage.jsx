@@ -25,8 +25,8 @@ const MomentumBadge = memo(({ momentum }) => (
 ));
 
 const TrendBadge = memo(({ trend }) => (
-  <Badge colorScheme={trend > 0.05 ? 'green' : trend < -0.05 ? 'red' : 'yellow'}>
-    {trend > 0.05 ? '📈' : trend < -0.05 ? '📉' : '➡️'}
+  <Badge colorScheme={trend > 0.005 ? 'green' : trend < -0.005 ? 'red' : 'yellow'}>
+    {trend > 0.005 ? '📈' : trend < -0.005 ? '📉' : '➡️'}
   </Badge>
 ));
 
@@ -48,75 +48,72 @@ const ScoreBadge = memo(({ score }) => (
     : '-' 
 ));
 
-const PriceCell = memo(({ source, availability, price, marketValue, trendFuture, volatility, undervalue, money }) => {
+const PriceCell = memo(({ source, availability, price, marketValue, suggestedBid, money }) => {
   let label = 'Mercado';
   let scheme = 'teal';
-  if (source === 'clause') {
+  let tooltipText = '';
+
+  // Determinamos el estado basado en availability_status del backend
+  if (source === 'clause' || availability === 'owned_clausulable') {
     label = 'Cláusula';
     scheme = 'purple';
+    tooltipText = `Precio por cláusula del propietario: €${(price || 0).toLocaleString('es-ES')}`;
   } else if (availability === 'bank') {
     label = 'Banco';
     scheme = 'gray';
+    tooltipText = 'Agente libre (fuera de mercado). Precio de referencia: valor de mercado';
   } else if (availability === 'market') {
     label = 'Mercado';
     scheme = 'teal';
+    if (suggestedBid && marketValue) {
+      const delta = suggestedBid - marketValue;
+      tooltipText = `Puja Máx. Sugerida: €${suggestedBid.toLocaleString('es-ES')} (+€${delta.toLocaleString('es-ES')} sobre mercado)`;
+    } else {
+      tooltipText = `Valor de mercado: €${(price || 0).toLocaleString('es-ES')}`;
+    }
+  } else if (availability === 'owned_not_clausulable') {
+    label = 'No disponible';
+    scheme = 'red';
+    tooltipText = 'Este jugador tiene propietario y no es clausulable. No está disponible para fichar.';
   }
-  // Sugerencia de puja máxima (umbral de rentabilidad): SIEMPRE > valor de mercado
-  let maxBid = null;
-  if (availability === 'market' && typeof marketValue === 'number' && marketValue > 0) {
-    const oi = Math.max(0, Math.min(1,
-      (Math.max(undervalue ?? 0, 0) * 0.4) +
-      (Math.max(trendFuture ?? 0, 0) * 0.4) +
-      ((1 - Math.max(Math.min(volatility ?? 0, 1), 0)) * 0.2)
-    ));
-    // Premium mínimo del 5% y hasta +35% según oportunidad
-    const factor = 1.05 + oi * 0.30; // [1.05, 1.35]
-    let raw = Math.floor(marketValue * factor);
-    if (raw <= marketValue) raw = marketValue + 1; // garantizar > mercado
-    maxBid = raw; // umbral teórico, no limitado por tu dinero
-  }
+
   const content = (
     <>
       <Badge colorScheme={scheme} mr={2}>{label}</Badge>
       €<Euro value={price} />
     </>
   );
-  if (availability === 'market' && maxBid) {
-    const delta = maxBid - (marketValue || 0);
-    const label = `Puja máx. sugerida (umbral de rentabilidad): €${maxBid.toLocaleString('es-ES')}  •  +€${delta.toLocaleString('es-ES')} sobre mercado`;
+
+  if (tooltipText) {
     return (
-      <Tooltip label={label}>
-        <Text as='span'>{content}</Text>
+      <Tooltip label={tooltipText}>
+        <Text as='span' cursor='help'>{content}</Text>
       </Tooltip>
     );
   }
-  if (source === 'clause') {
-    return (
-      <Tooltip label='Precio por cláusula del propietario'>
-        <Text as='span'>{content}</Text>
-      </Tooltip>
-    );
-  }
-  if (availability === 'bank') {
-    return (
-      <Tooltip label='Agente libre (fuera de mercado). Precio de referencia: valor de mercado'>
-        <Text as='span'>{content}</Text>
-      </Tooltip>
-    );
-  }
-  return content;
+  
+  return <Text as='span'>{content}</Text>;
 });
 
-const AffordabilityBar = memo(({ a }) => (
-  <Progress
-    value={Math.min((a ?? 0) * 100, 100)}
-    size='sm'
-    colorScheme={a == null ? 'gray' : a >= 0.8 ? 'green' : a >= 0.5 ? 'yellow' : 'red'}
-    borderRadius='md'
-    w='120px'
-    title={`${Math.round((a ?? 0) * 100)}% asequible`}
-  />
-));
+const AffordabilityBar = memo(({ a, price, money }) => {
+  const percentage = Math.round((a ?? 0) * 100);
+  const tooltipLabel = money != null && price != null
+    ? `Con tu dinero actual (€${money.toLocaleString('es-ES')}) puedes cubrir el ${percentage}% de los €${price.toLocaleString('es-ES')} que cuesta el jugador.`
+    : `${percentage}% asequible`;
+  
+  return (
+    <Tooltip label={tooltipLabel}>
+      <Progress
+        value={Math.min(percentage, 100)}
+        size='sm'
+        colorScheme={a == null ? 'gray' : a >= 0.8 ? 'green' : a >= 0.5 ? 'yellow' : 'red'}
+        borderRadius='md'
+        w='120px'
+        cursor='help'
+      />
+    </Tooltip>
+  );
+});
 
 /* 🆕 Nuevo componente: contexto táctico */
 const ContextBadge = memo(({ c }) => {
@@ -156,7 +153,7 @@ export default function RecommendationsPage() {
       desc: 'Priorizan jugadores con buenos puntos y tendencia.',
     },
     market: {
-      name: '💰 Mercado',
+      name: '💰 Broker de Mercado',
       desc: 'Optimiza según valor, tendencia y contexto del equipo.',
     },
     sell: {
@@ -208,12 +205,12 @@ export default function RecommendationsPage() {
             onChange={(e) => setMode(e.target.value)}
             bg='white'
             _dark={{ bg: 'gray.700' }}
-            maxW='240px'
+            maxW='280px'
           >
-            <option value='overall'>🔹 General</option>
-            <option value='performance'>⚽ Rendimiento</option>
-            <option value='market'>💰 Mercado</option>
-            <option value='sell'>📉 Broker de Ventas</option>
+            <option value='market'>� Broker de Mercado</option>
+            <option value='overall'>🔹 General (Próximamente)</option>
+            <option value='performance'>⚽ Rendimiento (Próximamente)</option>
+            <option value='sell'>📉 Broker de Ventas (Próximamente)</option>
           </Select>
         </FormControl>
 
@@ -273,73 +270,61 @@ export default function RecommendationsPage() {
                 <Th textAlign='center'>Riesgo</Th>
                 <Th textAlign='center'>Recomendación</Th>
               </>
+            ) : mode === 'market' ? (
+              <>
+                <Th isNumeric>
+                  <Tooltip label='Precio a pagar: Cláusula (si es clausulable) o Valor de mercado (Mercado/Banco)'>
+                    <Text as='span'>Valor</Text>
+                  </Tooltip>
+                </Th>
+                <Th textAlign='center'>
+                  <Tooltip label='Relación puntos/valor. ¡Alto = Ganga!'>
+                    <Text as='span'>Infravaloración</Text>
+                  </Tooltip>
+                </Th>
+                <Th textAlign='center'>
+                  <Tooltip label='Tendencia futura del valor (regresión). Positiva sube, negativa baja'>
+                    <Text as='span'>Tendencia</Text>
+                  </Tooltip>
+                </Th>
+                <Th textAlign='center'>
+                  <Tooltip label='Score global ponderado para el modo Mercado'>
+                    <Text as='span'>Score</Text>
+                  </Tooltip>
+                </Th>
+                <Th textAlign='center'>
+                  <Tooltip label='Forma reciente (últimas jornadas). Más alto = mejor estado'>
+                    <Text as='span'>Momentum</Text>
+                  </Tooltip>
+                </Th>
+                <Th textAlign='center'>
+                  <Tooltip label='Probabilidad de ser titular en la próxima jornada'>
+                    <Text as='span'>Titular</Text>
+                  </Tooltip>
+                </Th>
+                <Th textAlign='center'>
+                  <Tooltip label='Factor contextual: rendimiento del equipo, rival y localía'>
+                    <Text as='span'>Contexto ⚽</Text>
+                  </Tooltip>
+                </Th>
+                <Th textAlign='center'>
+                  <Tooltip label='Inestabilidad del precio. Alto = más oscilación (más riesgo)'>
+                    <Text as='span'>Volatilidad</Text>
+                  </Tooltip>
+                </Th>
+                <Th textAlign='center'>
+                  <Tooltip label='Escala 1–5. Más alto = mayor riesgo (lesión/rotación)'>
+                    <Text as='span'>Riesgo</Text>
+                  </Tooltip>
+                </Th>
+              </>
             ) : (
               <>
-                <Th textAlign='center'>
-                  {mode === 'market' ? (
-                    <Tooltip label='Probabilidad de ser titular en la próxima jornada'>
-                      <Text as='span'>Titular</Text>
-                    </Tooltip>
-                  ) : 'Titular'}
-                </Th>
-                <Th isNumeric>
-                  {mode === 'market' ? (
-                    <Tooltip label='Precio a pagar: Cláusula (si es clausulable) o Valor de mercado (Mercado/Banco)'>
-                      <Text as='span'>Valor</Text>
-                    </Tooltip>
-                  ) : 'Valor'}
-                </Th>
-                <Th textAlign='center'>
-                  {mode === 'market' ? (
-                    <Tooltip label='Forma reciente (últimas jornadas). Más alto = mejor estado'>
-                      <Text as='span'>Momentum</Text>
-                    </Tooltip>
-                  ) : 'Momentum'}
-                </Th>
-                {mode === 'market' && (
-                  <>
-                    <Th textAlign='center'>
-                      <Tooltip label='Qué porcentaje del precio puedes cubrir con tu dinero actual'>
-                        <Text as='span'>Asequibilidad</Text>
-                      </Tooltip>
-                    </Th>
-                    <Th textAlign='center'>
-                      <Tooltip label='Tendencia futura del valor (regresión). Positiva sube, negativa baja'>
-                        <Text as='span'>Tendencia</Text>
-                      </Tooltip>
-                    </Th>
-                    <Th textAlign='center'>
-                      <Tooltip label='Inestabilidad del precio. Alto = más oscilación (más riesgo)'>
-                        <Text as='span'>Volatilidad</Text>
-                      </Tooltip>
-                    </Th>
-                    <Th textAlign='center'>
-                      <Tooltip label='Relación puntos/valor. Alto = ganga (infravalorado)'>
-                        <Text as='span'>Infravaloración</Text>
-                      </Tooltip>
-                    </Th>
-                    {/* 🆕 Nueva columna de contexto */}
-                    <Th textAlign='center'>
-                      <Tooltip label='Factor contextual: rendimiento del equipo, rival y localía'>
-                        <Text as='span'>Contexto ⚽</Text>
-                      </Tooltip>
-                    </Th>
-                  </>
-                )}
-                <Th textAlign='center'>
-                  {mode === 'market' ? (
-                    <Tooltip label='Score global ponderado para el modo Mercado'>
-                      <Text as='span'>Score</Text>
-                    </Tooltip>
-                  ) : 'Score'}
-                </Th>
-                <Th textAlign='center'>
-                  {mode === 'market' ? (
-                    <Tooltip label='Escala 1–5. Más alto = mayor riesgo (lesión/rotación)'>
-                      <Text as='span'>Riesgo</Text>
-                    </Tooltip>
-                  ) : 'Riesgo'}
-                </Th>
+                <Th textAlign='center'>Titular</Th>
+                <Th isNumeric>Valor</Th>
+                <Th textAlign='center'>Momentum</Th>
+                <Th textAlign='center'>Score</Th>
+                <Th textAlign='center'>Riesgo</Th>
               </>
             )}
           </Tr>
@@ -387,46 +372,22 @@ export default function RecommendationsPage() {
                   <Link to={`/players/${p.id}`}>{p.name}</Link>
                 </Td>
                 <Td>{p.team_name}</Td>
-                <Td textAlign='center'>
-                  {mode === 'market' ? (
-                    <Tooltip label={`Probabilidad de titularidad: ${Math.round(p.titular_next_jor * 100)}%`}>
-                      <Text as='span'>
-                        <Badge colorScheme={p.titular_next_jor >= 0.75 ? 'green' : p.titular_next_jor >= 0.5 ? 'yellow' : 'red'}>
-                          {Math.round(p.titular_next_jor * 100)}%
-                        </Badge>
-                      </Text>
-                    </Tooltip>
-                  ) : (
-                    <Badge colorScheme={p.titular_next_jor >= 0.75 ? 'green' : p.titular_next_jor >= 0.5 ? 'yellow' : 'red'}>
-                      {Math.round(p.titular_next_jor * 100)}%
-                    </Badge>
-                  )}
-                </Td>
-                <Td isNumeric>
-                  <PriceCell
-                    source={p.value_source}
-                    availability={p.availability_status}
-                    price={p.price_to_pay}
-                    marketValue={p.market_value_num}
-                    trendFuture={p.trend_future}
-                    volatility={p.volatility}
-                    undervalue={p.undervalue_factor}
-                    money={money}
-                  />
-                </Td>
-                <Td textAlign='center'>
-                  {mode === 'market' ? (
-                    <Tooltip label={`Momentum (forma reciente): ${(p.momentum * 100).toFixed(0)}%`}>
-                      <Text as='span'><MomentumBadge momentum={p.momentum} /></Text>
-                    </Tooltip>
-                  ) : <MomentumBadge momentum={p.momentum} />}
-                </Td>
 
-                {mode === 'market' && (
+                {mode === 'market' ? (
                   <>
+                    <Td isNumeric>
+                      <PriceCell
+                        source={p.value_source}
+                        availability={p.availability_status}
+                        price={p.price_to_pay}
+                        marketValue={p.market_value_num}
+                        suggestedBid={p.suggested_bid}
+                        money={money}
+                      />
+                    </Td>
                     <Td textAlign='center'>
-                      <Tooltip label={`Asequibilidad: ${Math.round((p.affordability ?? 0) * 100)}% con tu dinero`}>
-                        <Text as='span'><AffordabilityBar a={p.affordability} /></Text>
+                      <Tooltip label={`Infravaloración estimada: ${Math.round((p.undervalue_factor ?? 0) * 100)}% (alto = ganga)`}>
+                        <Text as='span'><UndervalueBadge u={p.undervalue_factor} /></Text>
                       </Tooltip>
                     </Td>
                     <Td textAlign='center'>
@@ -435,13 +396,22 @@ export default function RecommendationsPage() {
                       </Tooltip>
                     </Td>
                     <Td textAlign='center'>
-                      <Tooltip label={`Volatilidad del precio: ${Math.round((p.volatility ?? 0) * 100)}% (más alto = más inestable)`}>
-                        <Text as='span'><VolatilityBadge v={p.volatility} /></Text>
+                      <Tooltip label={`Score (Mercado): ${(p.score ?? 0).toFixed(2)}`}>
+                        <Text as='span'><ScoreBadge score={p.score} /></Text>
                       </Tooltip>
                     </Td>
                     <Td textAlign='center'>
-                      <Tooltip label={`Infravaloración estimada: ${Math.round((p.undervalue_factor ?? 0) * 100)}% (alto = ganga)`}>
-                        <Text as='span'><UndervalueBadge u={p.undervalue_factor} /></Text>
+                      <Tooltip label={`Momentum (forma reciente): ${(p.momentum * 100).toFixed(0)}%`}>
+                        <Text as='span'><MomentumBadge momentum={p.momentum} /></Text>
+                      </Tooltip>
+                    </Td>
+                    <Td textAlign='center'>
+                      <Tooltip label={`Probabilidad de titularidad: ${Math.round(p.titular_next_jor * 100)}%`}>
+                        <Text as='span'>
+                          <Badge colorScheme={p.titular_next_jor >= 0.75 ? 'green' : p.titular_next_jor >= 0.5 ? 'yellow' : 'red'}>
+                            {Math.round(p.titular_next_jor * 100)}%
+                          </Badge>
+                        </Text>
                       </Tooltip>
                     </Td>
                     <Td textAlign='center'>
@@ -459,23 +429,45 @@ export default function RecommendationsPage() {
                         </Text>
                       </Tooltip>
                     </Td>
+                    <Td textAlign='center'>
+                      <Tooltip label={`Volatilidad del precio: ${Math.round((p.volatility ?? 0) * 100)}% (más alto = más inestable)`}>
+                        <Text as='span'><VolatilityBadge v={p.volatility} /></Text>
+                      </Tooltip>
+                    </Td>
+                    <Td textAlign='center'>
+                      <Tooltip label={`Riesgo (1–5): ${p.risk_level_num ?? 'NA'}`}>
+                        <Text as='span'><RiskBadge value={p.risk_level_num} /></Text>
+                      </Tooltip>
+                    </Td>
+                  </>
+                ) : (
+                  <>
+                    <Td textAlign='center'>
+                      <Badge colorScheme={p.titular_next_jor >= 0.75 ? 'green' : p.titular_next_jor >= 0.5 ? 'yellow' : 'red'}>
+                        {Math.round(p.titular_next_jor * 100)}%
+                      </Badge>
+                    </Td>
+                    <Td isNumeric>
+                      <PriceCell
+                        source={p.value_source}
+                        availability={p.availability_status}
+                        price={p.price_to_pay}
+                        marketValue={p.market_value_num}
+                        suggestedBid={p.suggested_bid}
+                        money={money}
+                      />
+                    </Td>
+                    <Td textAlign='center'>
+                      <MomentumBadge momentum={p.momentum} />
+                    </Td>
+                    <Td textAlign='center'>
+                      <ScoreBadge score={p.score} />
+                    </Td>
+                    <Td textAlign='center'>
+                      <RiskBadge value={p.risk_level_num} />
+                    </Td>
                   </>
                 )}
-
-                <Td textAlign='center'>
-                  {mode === 'market' ? (
-                    <Tooltip label={`Score (Mercado): ${(p.score ?? 0).toFixed(2)}`}>
-                      <Text as='span'><ScoreBadge score={p.score} /></Text>
-                    </Tooltip>
-                  ) : <ScoreBadge score={p.score} />}
-                </Td>
-                <Td textAlign='center'>
-                  {mode === 'market' ? (
-                    <Tooltip label={`Riesgo (1–5): ${p.risk_level_num ?? 'NA'}`}>
-                      <Text as='span'><RiskBadge value={p.risk_level_num} /></Text>
-                    </Tooltip>
-                  ) : <RiskBadge value={p.risk_level_num} />}
-                </Td>
               </Tr>
             );
           })}

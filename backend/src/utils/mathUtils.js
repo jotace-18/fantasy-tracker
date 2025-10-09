@@ -80,10 +80,21 @@ function volatility(values) {
 /**
  * Calcula un factor de infravaloración (undervalue)
  * basado en la media de puntos y el valor medio de mercado.
+ * CALIBRADO: Usa una escala logarítmica para mayor discriminación.
  */
 function undervalueFactor(avgPoints, avgMarketValue) {
   if (!avgMarketValue || avgMarketValue <= 0) return 0;
-  return Math.min(avgPoints / (avgMarketValue / 1_000_000), 1);
+  if (!avgPoints || avgPoints <= 0) return 0;
+  
+  // Ratio bruto: puntos por millón de euros
+  const rawRatio = avgPoints / (avgMarketValue / 1_000_000);
+  
+  // Aplicamos una función logarítmica para comprimir el rango
+  // y hacer más discriminatoria la métrica
+  // Valores típicos: 2-4 puntos/M€ → 0.3-0.7
+  const calibrated = Math.log10(rawRatio + 1) / Math.log10(6);
+  
+  return Math.max(0, Math.min(calibrated, 1));
 }
 
 /**
