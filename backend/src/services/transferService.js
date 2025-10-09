@@ -1,9 +1,9 @@
-// services/transferService.js
+// src/services/transferService.js
 const transferModel = require("../models/transferModel");
 const db = require("../db/db");
+const { addPortfolioEntry } = require("../services/portfolioService"); // ✅ integración portfolio
 
-//const USER_TEAM_ID = 1; // tu equipo en user_players
-//const SELF_PARTICIPANT_ID = 8; // tu id en participants
+const MY_PARTICIPANT_ID = 8; // ⚙️ Tu ID personal (solo registrará tus operaciones)
 
 // 🔹 Actualiza dinero
 function updateMoney(participantId, delta, cb) {
@@ -109,99 +109,164 @@ function create(transfer, cb) {
 
   precheck().then(() => {
     updateMoney(buyerId, -amount, (err) => {
-    if (err) return cb(err);
+      if (err) return cb(err);
 
-    updateMoney(sellerId, amount, (err2) => {
-      if (err2) return cb(err2);
+      updateMoney(sellerId, amount, (err2) => {
+        if (err2) return cb(err2);
 
-      movePlayer(player_id, sellerId, buyerId, amount, (err3) => {
-        if (err3) return cb(err3);
+        movePlayer(player_id, sellerId, buyerId, amount, (err3) => {
+          if (err3) return cb(err3);
 
-        // Si se vende al mercado (buyerId null), opcionalmente resetear cláusula
-        const resetClauseIfSoldToMarket = (done) => {
-          if (!buyerId) {
-            // Al vender al mercado, simplemente se elimina la relación del vendedor,
-            // por tanto no hay cláusula activa asociada a ningún participante.
-            // No es necesario actualizar clause_value en participant_players aquí.
-            return done();
-          } else {
-            done();
-          }
-        };
+          transferModel.create(transfer, async (err4, result) => {
+            if (err4) return cb(err4);
 
-        transferModel.create(transfer, (err4, result) => {
-          if (err4) return cb(err4);
+            console.log("📑 Transfer guardado en tabla transfers:", result);
 
-          console.log("📑 Transfer guardado en tabla transfers:", result);
+            /* -------------------------------------------------------------------------- */
+            /* 🧾 REGISTRO EN PORTFOLIO_HISTORY SOLO SI PARTICIPANT_ID = 8                */
+            /* -------------------------------------------------------------------------- */
+            try {
+              // Solo registramos si yo participo (compra o venta mía)
+              const soyYo = buyerId === MY_PARTICIPANT_ID || sellerId === MY_PARTICIPANT_ID;
+              if (!soyYo) {
+                console.log("⏩ Movimiento externo: no se registra en portfolio.");
+              } else {
+                const actionType =
+                  type === "buy"
+                    ? "BUY"
+                    : type === "sell"
+                    ? "SELL"
+                    : type === "clause"
+                    ? "CLAUSE"
+                    : "TRANSFER";
 
-          // Tras comprar (buy o clause), el valor de la cláusula pasa a ser el precio de compra
-          const updateClauseIfNeeded = (done) => {
-            if (buyerId) {
-              const participantPlayersModel = require("../models/participantPlayersModel");
-              participantPlayersModel.updateClauseValue(buyerId, player_id, amount, (errClause) => {
-                if (errClause) {
-                  console.error("❌ Error actualizando valor de cláusula:", errClause.message);
-                  return done(errClause);
+                const playersModel = require("../models/playersModel");
+                const player = await playersModel.findPlayerById(player_id);
+
+                const playerName = player?.name || `Jugador ${player_id}`;
+                const teamName = player?.team?.name || null;
+                const marketValueNum =
+                  Number(String(player?.market_value || "").replace(/\D/g, "")) || 0;
+
+                let roi = 0;
+                if (actionType === "SELL" && sellerId === MY_PARTICIPANT_ID) {
+                  // Buscar precio previo de compra del mismo jugador
+                  const query = `
+                    SELECT value
+                    FROM portfolio_history
+                    WHERE player_id = ? AND participant_id = ? AND action_type IN ('BUY','CLAUSE')
+                    ORDER BY id DESC LIMIT 1;
+                  `;
+                  const prevBuy = await new Promise((resolve) =>
+                    db.get(query, [player_id, MY_PARTICIPANT_ID], (err, row) =>
+                      resolve(row?.value || null)
+                    )
+                  );
+
+                  if (prevBuy && prevBuy > 0) {
+                    roi = Number((((amount - prevBuy) / prevBuy) * 100).toFixed(2));
+                    console.log(
+                      `📈 ROI calculado para venta de ${playerName}: ${roi}% (comprado por ${prevBuy}, vendido por ${amount})`
+                    );
+                  } else {
+                    console.log(`ℹ️ No se encontró compra previa para ${playerName}`);
+                  }
                 }
-                console.log(`💶 Valor de cláusula actualizado a precio de compra (con piso mercado) ${amount}`);
-                done();
+
+                const entry = {
+                  participant_id: MY_PARTICIPANT_ID,
+                  player_id,
+                  player_name: playerName,
+                  team_name: teamName,
+                  action_type: actionType,
+                  value: amount,
+                  market_value: marketValueNum,
+                  roi,
+                  context_factor: 1,
+                  notes:
+                    actionType === "CLAUSE"
+                      ? "Compra mediante cláusula"
+                      : actionType === "SELL"
+                      ? "Venta al mercado o participante"
+                      : "Compra directa / libre",
+                };
+
+                await addPortfolioEntry(entry);
+                console.log(`🧾 Portfolio actualizado [${actionType}] para ${playerName}`);
+              }
+            } catch (errPort) {
+              console.error("❌ Error al registrar en portfolio_history:", errPort.message);
+            }
+
+            /* -------------------------------------------------------------------------- */
+            // 💶 Clausula y lock (mantienes tu lógica original)
+            const participantPlayersModel = require("../models/participantPlayersModel");
+            const updateClauseIfNeeded = (done) => {
+              if (buyerId) {
+                participantPlayersModel.updateClauseValue(
+                  buyerId,
+                  player_id,
+                  amount,
+                  (errClause) => {
+                    if (errClause) {
+                      console.error("❌ Error actualizando valor de cláusula:", errClause.message);
+                      return done(errClause);
+                    }
+                    console.log(
+                      `💶 Valor de cláusula actualizado a precio de compra (con piso mercado) ${amount}`
+                    );
+                    done();
+                  }
+                );
+              } else done();
+            };
+
+            if (buyerId) {
+              let lockSql, lockParams;
+              if (
+                type === "clause" &&
+                transfer.date &&
+                transfer.time &&
+                /^\d{4}-\d{2}-\d{2}$/.test(transfer.date) &&
+                /^\d{2}:\d{2}$/.test(transfer.time)
+              ) {
+                lockSql = `
+                  UPDATE participant_players
+                  SET is_clausulable = 0,
+                      clause_lock_until = datetime(? || ' ' || ?, '+14 days')
+                  WHERE participant_id = ? AND player_id = ?
+                `;
+                lockParams = [transfer.date, transfer.time, buyerId, player_id];
+              } else {
+                lockSql = `
+                  UPDATE participant_players
+                  SET is_clausulable = 0,
+                      clause_lock_until = datetime('now', '+14 days')
+                  WHERE participant_id = ? AND player_id = ?
+                `;
+                lockParams = [buyerId, player_id];
+              }
+              db.run(lockSql, lockParams, function (err5) {
+                if (err5) {
+                  console.error("❌ Error bloqueando clausula:", err5.message);
+                  return cb(err5);
+                }
+                console.log(`🔒 Jugador ${player_id} bloqueado hasta +14 días`);
+                updateClauseIfNeeded((errClause) => {
+                  if (errClause) return cb(errClause);
+                  cb(null, result);
+                });
               });
             } else {
-              done();
-            }
-          };
-
-          // 🔒 Tras cualquier traspaso, bloquear cláusula 14 días y desactivar clausulable
-          if (buyerId) {
-            // Si es clausulazo con fecha personalizada, sumar 14 días a esa fecha
-            let lockSql, lockParams;
-            if (
-              type === "clause" &&
-              transfer.date &&
-              transfer.time &&
-              /^\d{4}-\d{2}-\d{2}$/.test(transfer.date) &&
-              /^\d{2}:\d{2}$/.test(transfer.time)
-            ) {
-              lockSql = `
-                UPDATE participant_players
-                SET is_clausulable = 0,
-                    clause_lock_until = datetime(? || ' ' || ?, '+14 days')
-                WHERE participant_id = ? AND player_id = ?
-              `;
-              lockParams = [transfer.date, transfer.time, buyerId, player_id];
-            } else {
-              lockSql = `
-                UPDATE participant_players
-                SET is_clausulable = 0,
-                    clause_lock_until = datetime('now', '+14 days')
-                WHERE participant_id = ? AND player_id = ?
-              `;
-              lockParams = [buyerId, player_id];
-            }
-            db.run(lockSql, lockParams, function (err5) {
-              if (err5) {
-                console.error("❌ Error bloqueando clausula:", err5.message);
-                return cb(err5);
-              }
-              console.log(`🔒 Jugador ${player_id} bloqueado hasta +14 días`);
               updateClauseIfNeeded((errClause) => {
                 if (errClause) return cb(errClause);
                 cb(null, result);
               });
-            });
-          } else {
-            updateClauseIfNeeded((errClause) => {
-              if (errClause) return cb(errClause);
-              // Resetear cláusula si se vende al mercado
-              resetClauseIfSoldToMarket(() => {
-                cb(null, result);
-              });
-            });
-          }
+            }
+          });
         });
       });
     });
-  });
   }).catch((e) => cb(e));
 }
 

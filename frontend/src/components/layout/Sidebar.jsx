@@ -14,6 +14,7 @@ export default function Sidebar() {
     { to: "/calendar", label: "Calendario" },
     { to: "/market", label: "Mercado Diario" },
     { to: "/recommendations", label: "Recomendaciones" },
+  { to: "/portfolio/players", label: "Jugadores (insights)" },
   ];
 
   return (

@@ -1,7 +1,9 @@
 // src/services/analyticsService.js
 const db = require("../db/db");
 const axios = require("axios");
-const contextCache = new Map();
+const contextCache = new Map(); // keys: teamId -> { data, t }
+const contextInFlight = new Map(); // keys: teamId -> Promise
+const CONTEXT_TTL_MS = 10 * 60 * 1000; // 10 minutos
 const {
   normalize,
   mean,
@@ -67,16 +69,23 @@ function getMarketHistoryStats(playerId) {
  * ⚡ Con caché por equipo para acelerar enormemente la respuesta.
  */
 async function getTeamContext(teamId) {
-  if (contextCache.has(teamId)) return contextCache.get(teamId); // 🚀 cache hit
+  const now = Date.now();
+  const cached = contextCache.get(teamId);
+  if (cached && (now - cached.t) < CONTEXT_TTL_MS) return cached.data; // 🚀 cache hit (fresh)
+
+  // De-dupe concurrencia: si ya hay una promesa en curso, esperar a esa
+  const inFlight = contextInFlight.get(teamId);
+  if (inFlight) return inFlight;
 
   try {
+    const p = (async () => {
     // 1️⃣ Solo se pide el calendario UNA vez (por todo el servicio)
     if (!contextCache.has("_calendar")) {
       const { data: jornadas } = await axios.get(`http://backend:4000/api/calendar/next?limit=10`);
-      if (Array.isArray(jornadas)) contextCache.set("_calendar", jornadas);
-      else contextCache.set("_calendar", []);
+      if (Array.isArray(jornadas)) contextCache.set("_calendar", { data: jornadas, t: now });
+      else contextCache.set("_calendar", { data: [], t: now });
     }
-    const jornadas = contextCache.get("_calendar") || [];
+    const jornadas = (contextCache.get("_calendar")?.data) || [];
 
     // 2️⃣ Buscamos el enfrentamiento del equipo
     let match = null;
@@ -137,15 +146,20 @@ async function getTeamContext(teamId) {
       home: isHome,
       context_factor: contextFactor,
     };
-
-    contextCache.set(teamId, result); // ✅ guardar en caché
-    console.log(`[Context] (${isHome ? "🏠" : "🚗"}) ${teamId} vs ${rivalName} → ${contextFactor}`);
-
+    contextCache.set(teamId, { data: result, t: now }); // ✅ guardar en caché
+    if (process.env.LOG_TEAM_CONTEXT === '1') {
+      console.log(`[Context] (${isHome ? "🏠" : "🚗"}) ${teamId} vs ${rivalName} → ${contextFactor}`);
+    }
     return result;
+    })();
+    contextInFlight.set(teamId, p);
+    const data = await p;
+    contextInFlight.delete(teamId);
+    return data;
   } catch (err) {
     console.warn(`[Context] ⚠️ Error fetching context for team_id=${teamId}: ${err.message}`);
     const fallback = { team_form: 1, opponent_diff: 1, home: false, context_factor: 1 };
-    contextCache.set(teamId, fallback);
+    contextCache.set(teamId, { data: fallback, t: now });
     return fallback;
   }
 }
@@ -170,12 +184,21 @@ function getParticipantMoney(participantId) {
 /* 🔸 FUNCIÓN PRINCIPAL: Recomendaciones dinámicas                           */
 /* -------------------------------------------------------------------------- */
 
-async function getAdaptiveRecommendations(mode = 'overall', limit = 20, participantId = 8) {
+const recCache = new Map(); // key: `${mode}:${participantId}:${limit}:${includeOwn?1:0}` -> { data, t }
+const REC_TTL_MS = 30 * 1000; // 30s
+
+async function getAdaptiveRecommendations(mode = 'overall', limit = 20, participantId = 8, options = {}) {
+  const includeOwn = !!options.includeOwn;
+  const key = `${mode}:${participantId}:${limit}:${includeOwn?1:0}`;
+  const now = Date.now();
+  const cached = recCache.get(key);
+  if (cached && (now - cached.t) < REC_TTL_MS) return cached.data;
   return new Promise((resolve, reject) => {
     const query = `
       SELECT
         p.id,
         p.name,
+        p.position,
         t.name AS team_name,
         p.team_id,
         p.market_value,
@@ -234,11 +257,11 @@ async function getAdaptiveRecommendations(mode = 'overall', limit = 20, particip
       const results = await Promise.all(rows.map(async p => {
         try {
           // 🚫 No recomendar mis propios jugadores en modos que no sean SELL
-          if (mode !== 'sell' && p.owner_id != null && String(p.owner_id) === String(participantId)) {
+          if (!includeOwn && mode !== 'sell' && p.owner_id != null && String(p.owner_id) === String(participantId)) {
             return null;
           }
           // 🚫 Excluir jugadores que están en propiedad de alguien y NO son clausulables (no comprables)
-          if (mode !== 'sell' && p.owner_id != null && Number(p.owner_is_clausulable ?? 0) !== 1) {
+          if (!includeOwn && mode !== 'sell' && p.owner_id != null && Number(p.owner_is_clausulable ?? 0) !== 1) {
             return null;
           }
 
@@ -365,6 +388,7 @@ async function getAdaptiveRecommendations(mode = 'overall', limit = 20, particip
       const valid = results.filter(r => r && !isNaN(r.score));
       const sorted = valid.sort((a, b) => b.score - a.score).slice(0, limit);
       console.log(`[Analytics] Jugadores con score válido: ${valid.length}`);
+      recCache.set(key, { data: sorted, t: now });
       resolve(sorted);
     });
   });

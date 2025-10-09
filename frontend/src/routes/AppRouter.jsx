@@ -14,6 +14,7 @@ import CalendarPage from "../pages/CalendarPage";
 import ParticipantProfilePage from "../pages/ParticipantProfilePage";
 import MarketPage from "../pages/MarketPage";
 import RecommendationsPage from "../pages/RecommendationsPage";
+import PortfolioPlayersPage from "../pages/PortfolioPlayersPage";
 
 export default function AppRouter() {
   return (
@@ -32,6 +33,8 @@ export default function AppRouter() {
           <Route path="/participants/:id" element={<ParticipantProfilePage />} />
           <Route path="/market" element={<MarketPage />} />
           <Route path="/recommendations" element={<RecommendationsPage />} />
+          {/* PortfolioPage removed; keep players insights route below */}
+          <Route path="/portfolio/players" element={<PortfolioPlayersPage />} />
   </Routes>
       </Layout>
     </BrowserRouter>

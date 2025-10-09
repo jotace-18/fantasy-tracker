@@ -26,6 +26,8 @@ const matchResultsRoutes = require('./routes/matchResultsRoutes');
 
 // Capa de analisis
 const analyticsRoutes = require('./routes/analyticsRoutes');
+const portfolioRoutes = require('./routes/portfolioRoutes');
+const { createTableIfNotExists: ensureAdviceCache } = require('./models/portfolioAdviceModel');
 
 // DB y modelos para healthcheck
 const db = require('./db/db');
@@ -55,6 +57,7 @@ app.use('/api/transfers', transfersRoutes);
 
 // Rutas de analítica
 app.use('/api/analytics', analyticsRoutes);
+app.use('/api/portfolio', portfolioRoutes);
 
 // OpenAPI spec JSON
 app.get('/api/openapi.json', (req,res)=>{ res.json(openapi); });
@@ -136,6 +139,7 @@ module.exports = app;
 // Nota: en tests, el proceso es efímero; esto no debería interferir.
 try {
   scheduleAutoUnlock(60_000); // cada 60s
+  ensureAdviceCache().catch(()=>{});
 } catch (err) {
   console.error('[clause] No se pudo iniciar el auto-unlock:', err?.message || err);
 }
