@@ -78,23 +78,40 @@ function volatility(values) {
 }
 
 /**
- * Calcula un factor de infravaloración (undervalue)
- * basado en la media de puntos y el valor medio de mercado.
- * CALIBRADO: Usa una escala logarítmica para mayor discriminación.
+ * Calcula un factor de infravaloración (undervalue) v2.3
+ * basado en la media de puntos y el valor de mercado ACTUAL.
+ * RECALIBRADO: Escala mucho más estricta y exigente.
+ * 
+ * CRITERIOS:
+ * - < 1 pto/M€:  0.00 (muy caro, pésima relación)
+ * - 1-2 pto/M€:  0.10-0.25 (caro)
+ * - 2-3 pto/M€:  0.25-0.45 (precio justo)
+ * - 3-5 pto/M€:  0.45-0.70 (buena relación)
+ * - 5-8 pto/M€:  0.70-0.90 (muy buena, ganga)
+ * - > 8 pto/M€:  0.90-1.00 (ganga absoluta)
  */
-function undervalueFactor(avgPoints, avgMarketValue) {
-  if (!avgMarketValue || avgMarketValue <= 0) return 0;
+function undervalueFactor(avgPoints, currentMarketValue) {
+  if (!currentMarketValue || currentMarketValue <= 0) return 0;
   if (!avgPoints || avgPoints <= 0) return 0;
   
-  // Ratio bruto: puntos por millón de euros
-  const rawRatio = avgPoints / (avgMarketValue / 1_000_000);
+  // Ratio: puntos por millón de euros
+  const ratio = avgPoints / (currentMarketValue / 1_000_000);
   
-  // Aplicamos una función logarítmica para comprimir el rango
-  // y hacer más discriminatoria la métrica
-  // Valores típicos: 2-4 puntos/M€ → 0.3-0.7
-  const calibrated = Math.log10(rawRatio + 1) / Math.log10(6);
+  // Nueva calibración más estricta y realista
+  // Usamos una curva logarítmica ajustada
+  // log10(ratio + 1) normalizado para que:
+  // - ratio = 1 → ~0.15
+  // - ratio = 3 → ~0.48
+  // - ratio = 5 → ~0.67
+  // - ratio = 8 → ~0.82
+  // - ratio = 15 → ~0.95
   
-  return Math.max(0, Math.min(calibrated, 1));
+  const calibrated = Math.log10(ratio + 1) / Math.log10(16);
+  
+  // Penalización extra para ratios muy bajos (< 1.5 puntos/millón)
+  const penalty = ratio < 1.5 ? (1.5 - ratio) * 0.15 : 0;
+  
+  return Math.max(0, Math.min(calibrated - penalty, 1));
 }
 
 /**

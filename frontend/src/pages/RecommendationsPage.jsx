@@ -1,14 +1,18 @@
 // src/pages/RecommendationsPage.jsx
-import React, { memo } from 'react';
+import React, { memo, useState } from 'react';
 import {
   Box, HStack, Text, Badge, Input, Thead, Tbody, Tr, Th, Td,
-  Tooltip, IconButton, Switch, FormControl, FormLabel, Select, Progress
+  Tooltip, IconButton, Switch, FormControl, FormLabel, Select, Progress,
+  Button, Textarea, Modal, ModalOverlay, ModalContent, ModalHeader,
+  ModalBody, ModalCloseButton, useDisclosure, useToast, VStack
 } from '@chakra-ui/react';
 import { Link } from 'react-router-dom';
 import { PageHeader } from '../components/ui/PageHeader';
 import { DataTableShell } from '../components/ui/DataTableShell';
 import useRecommendationsData from '../hooks/useRecommendationsData';
-import { InfoOutlineIcon } from '@chakra-ui/icons';
+import { InfoOutlineIcon, CopyIcon } from '@chakra-ui/icons';
+import CatalystBadge from '../components/CatalystBadge';
+import BubbleBadge from '../components/BubbleBadge';
 
 const Euro = ({ value }) => (typeof value === 'number' ? value.toLocaleString('es-ES') : value ?? '-');
 
@@ -24,11 +28,40 @@ const MomentumBadge = memo(({ momentum }) => (
   </Badge>
 ));
 
-const TrendBadge = memo(({ trend }) => (
-  <Badge colorScheme={trend > 0.005 ? 'green' : trend < -0.005 ? 'red' : 'yellow'}>
-    {trend > 0.005 ? '📈' : trend < -0.005 ? '📉' : '➡️'}
-  </Badge>
-));
+const TrendBadge = memo(({ trend }) => {
+  // Escala clara de tendencias:
+  // >3%: 🚀 Brutal (verde fuerte)
+  // 1-3%: 📈 Buena (amarillo/naranja)
+  // 0-1%: ➡️ Neutra (gris)
+  // <0%: 📉 Negativa (rojo)
+  
+  let color, icon, label;
+  
+  if (trend >= 3.0) {
+    color = 'green';
+    icon = '🚀';
+    label = `${trend.toFixed(1)}%`;
+  } else if (trend >= 1.0) {
+    color = 'orange';
+    icon = '📈';
+    label = `${trend.toFixed(1)}%`;
+  } else if (trend >= 0) {
+    color = 'gray';
+    icon = '➡️';
+    label = `${trend.toFixed(1)}%`;
+  } else {
+    color = 'red';
+    icon = '📉';
+    label = `${trend.toFixed(1)}%`;
+  }
+  
+  return (
+    <Badge colorScheme={color} display="inline-flex" alignItems="center" gap={1}>
+      <span>{icon}</span>
+      <span>{label}</span>
+    </Badge>
+  );
+});
 
 const VolatilityBadge = memo(({ v }) => (
   <Badge colorScheme={v < 0.2 ? 'green' : v < 0.5 ? 'yellow' : 'red'}>
@@ -115,14 +148,31 @@ const AffordabilityBar = memo(({ a, price, money }) => {
   );
 });
 
-/* 🆕 Nuevo componente: contexto táctico */
+/* 🆕 Componente: contexto táctico (v2.0 - Más sensible) */
 const ContextBadge = memo(({ c }) => {
   if (c == null) return <Badge colorScheme='gray'>NA</Badge>;
-  const scheme = c >= 1.05 ? 'green' : c >= 0.95 ? 'yellow' : 'red';
-  const label =
-    c >= 1.05 ? '⚽ Partido favorable' :
-    c >= 0.95 ? '➡️ Neutro' :
-    '❌ Desfavorable';
+  
+  // Umbrales ajustados para el nuevo cálculo multiplicativo
+  // Rango esperado: 0.60-2.00 (form × rival × home)
+  // Neutro = 1.0 (todo en valores base)
+  let scheme, label;
+  if (c >= 1.25) {
+    scheme = 'green';
+    label = '🔥 Muy favorable';
+  } else if (c >= 1.05) {
+    scheme = 'green';
+    label = '⚽ Favorable';
+  } else if (c >= 0.95) {
+    scheme = 'yellow';
+    label = '➡️ Neutro';
+  } else if (c >= 0.80) {
+    scheme = 'orange';
+    label = '⚠️ Difícil';
+  } else {
+    scheme = 'red';
+    label = '❌ Muy difícil';
+  }
+  
   return <Badge colorScheme={scheme}>{label}</Badge>;
 });
 
@@ -137,10 +187,87 @@ export default function RecommendationsPage() {
     money
   } = useRecommendationsData();
 
+  const { isOpen, onOpen, onClose } = useDisclosure();
+  const toast = useToast();
+  const [exportText, setExportText] = useState('');
+
   const sellRecommendation = (score) => {
     if (score >= 0.6) return { label: '💸 Vender ya', color: 'red' };
     if (score >= 0.4) return { label: '⚖️ Mantener', color: 'yellow' };
     return { label: '🕓 Esperar', color: 'green' };
+  };
+
+  const generateTop10Summary = () => {
+    const top10 = data.slice(0, 10);
+    
+    let summary = '📊 TOP 10 RECOMENDACIONES - BROKER DE MERCADO\n';
+    summary += '='.repeat(80) + '\n\n';
+    
+    top10.forEach((player, index) => {
+      // Formatear disponibilidad
+      let availabilityText = 'N/A';
+      if (player.availability_status === 'market') availabilityText = '🛒 Mercado';
+      else if (player.availability_status === 'bank') availabilityText = '🏦 Banco';
+      else if (player.availability_status === 'owned_clausulable') availabilityText = '🔓 Clausulable (Tuyo)';
+      else if (player.availability_status === 'owned_not_clausulable') availabilityText = '🔒 No Clausulable (Tuyo)';
+      else if (player.availability_status === 'owned_other') availabilityText = '👤 Otro manager';
+      
+      summary += `#${index + 1}. ${player.name || 'N/A'}\n`;
+      summary += `   📈 Score: ${(player.score || 0).toFixed(2)}\n`;
+      summary += `   💰 Precio a pagar: €${(player.price_to_pay || 0).toLocaleString('es-ES')}\n`;
+      summary += `   📦 Disponibilidad: ${availabilityText}\n`;
+      summary += `   📊 Tendencia: ${(player.trend_future || 0).toFixed(2)}%\n`;
+      summary += `   💎 Infravaloración: ${((player.undervalue_factor || 0) * 100).toFixed(0)}%\n`;
+      summary += `   ⚡ Momentum: ${((player.momentum || 0) * 100).toFixed(0)}%\n`;
+      summary += `   👤 Titular próxima jornada: ${((player.titular_next_jor || 0) * 100).toFixed(0)}%\n`;
+      summary += `   🎯 Factor contexto: ${(player.context_factor || 0).toFixed(2)}x\n`;
+      summary += `   📉 Volatilidad: ${(player.volatility || 0).toFixed(2)}%\n`;
+      summary += `   ⚠️ Riesgo: ${(player.risk_level_num || 0).toFixed(1)}/5\n`;
+      summary += `   🏟️ Equipo: ${player.team_name || 'N/A'}\n`;
+      summary += `   📅 Próximo rival: ${player.next_opponent || 'N/A'} (${player.next_location === 'home' ? '🏠 Casa' : '✈️ Fuera'})\n`;
+      summary += `   💵 Oferta sugerida: €${(player.suggested_bid || 0).toLocaleString('es-ES')}\n`;
+      if (player.catalyst && player.catalyst.has_catalyst) {
+        const bonusPercent = Math.round((player.catalyst.bonus || 0) * 100);
+        summary += `   ⚡ CATALIZADOR: ${player.catalyst.reasoning} (+${bonusPercent}%)\n`;
+      }
+      if (player.bubble && player.bubble.is_bubble) {
+        const penaltyPercent = Math.abs(Math.round((player.bubble.penalty || 0) * 100));
+        summary += `   ⚠️ BURBUJA: ${player.bubble.reasoning} (-${penaltyPercent}%)\n`;
+      }
+      summary += '\n';
+    });
+    
+    summary += '='.repeat(80) + '\n';
+    summary += `Generado: ${new Date().toLocaleString('es-ES')}\n`;
+    summary += `Tu dinero disponible: €${(money || 0).toLocaleString('es-ES')}\n`;
+    
+    return summary;
+  };
+
+  const handleExport = () => {
+    const summary = generateTop10Summary();
+    setExportText(summary);
+    onOpen();
+  };
+
+  const handleCopyToClipboard = () => {
+    navigator.clipboard.writeText(exportText).then(() => {
+      toast({
+        title: '✅ Copiado al portapapeles',
+        description: 'El resumen del Top 10 se ha copiado correctamente',
+        status: 'success',
+        duration: 2000,
+        isClosable: true,
+      });
+    }).catch(() => {
+      toast({
+        title: '❌ Error al copiar',
+        description: 'No se pudo copiar al portapapeles',
+        status: 'error',
+        duration: 2000,
+        isClosable: true,
+      });
+    });
   };
 
   const formulaText = {
@@ -207,12 +334,24 @@ export default function RecommendationsPage() {
             _dark={{ bg: 'gray.700' }}
             maxW='280px'
           >
-            <option value='market'>� Broker de Mercado</option>
+            <option value='market'>💰 Broker de Mercado</option>
             <option value='overall'>🔹 General (Próximamente)</option>
             <option value='performance'>⚽ Rendimiento (Próximamente)</option>
             <option value='sell'>📉 Broker de Ventas (Próximamente)</option>
           </Select>
         </FormControl>
+
+        {mode === 'market' && data.length > 0 && (
+          <Button
+            size='sm'
+            colorScheme='blue'
+            leftIcon={<CopyIcon />}
+            onClick={handleExport}
+            isDisabled={loading}
+          >
+            Exportar Top 10
+          </Button>
+        )}
 
         {mode !== 'sell' && (
           <>
@@ -370,6 +509,11 @@ export default function RecommendationsPage() {
               >
                 <Td fontWeight='semibold' color='teal.600'>
                   <Link to={`/players/${p.id}`}>{p.name}</Link>
+                  {/* v2.0: Badges de catalizadores y burbujas */}
+                  <HStack mt={1} spacing={1}>
+                    <CatalystBadge catalyst={p.catalyst} />
+                    <BubbleBadge bubble={p.bubble} />
+                  </HStack>
                 </Td>
                 <Td>{p.team_name}</Td>
 
@@ -417,11 +561,15 @@ export default function RecommendationsPage() {
                     <Td textAlign='center'>
                       <Tooltip
                         label={`Contexto del equipo: ${(p.context_factor ?? 1).toFixed(2)}x — ${
-                          p.context_factor >= 1.05
-                            ? 'Partido favorable (local, buena forma)'
-                            : p.context_factor <= 0.95
-                            ? 'Partido difícil (fuera, rival duro)'
-                            : 'Neutral'
+                          p.context_factor >= 1.25
+                            ? '🔥 Muy favorable (rival débil, casa, buena forma)'
+                            : p.context_factor >= 1.05
+                            ? '⚽ Favorable (condiciones positivas)'
+                            : p.context_factor >= 0.95
+                            ? '➡️ Neutral (sin ventajas claras)'
+                            : p.context_factor >= 0.80
+                            ? '⚠️ Difícil (rival complicado o fuera)'
+                            : '❌ Muy difícil (rival superior, fuera, mala forma)'
                         }`}
                       >
                         <Text as='span'>
@@ -473,6 +621,35 @@ export default function RecommendationsPage() {
           })}
         </Tbody>
       </DataTableShell>
+
+      {/* Modal de Exportación */}
+      <Modal isOpen={isOpen} onClose={onClose} size='xl'>
+        <ModalOverlay />
+        <ModalContent>
+          <ModalHeader>📊 Top 10 Recomendaciones</ModalHeader>
+          <ModalCloseButton />
+          <ModalBody pb={6}>
+            <VStack spacing={3} align='stretch'>
+              <Textarea
+                value={exportText}
+                readOnly
+                rows={20}
+                fontFamily='monospace'
+                fontSize='sm'
+                resize='vertical'
+              />
+              <Button
+                colorScheme='blue'
+                leftIcon={<CopyIcon />}
+                onClick={handleCopyToClipboard}
+                w='full'
+              >
+                Copiar al portapapeles
+              </Button>
+            </VStack>
+          </ModalBody>
+        </ModalContent>
+      </Modal>
     </Box>
   );
 }

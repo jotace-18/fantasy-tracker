@@ -120,6 +120,21 @@ export default function AddTransferModal({ isOpen, onClose, onTransferAdded }) {
       return;
     }
 
+    // ✅ Permitir hasta 2M por debajo del valor de mercado en compra y cláusula
+    const TOLERANCE = 2000000; // 2M€
+    const minAllowedPrice = player.market_value_num ? player.market_value_num - TOLERANCE : 0;
+
+    if ((action === "buy" || action === "clause") && player.market_value_num && Number(amount) < minAllowedPrice) {
+      toast({
+        title: "Error",
+        description: `El precio no puede ser menor a ${minAllowedPrice.toLocaleString('es-ES')}€ (mercado - 2M)`,
+        status: "error",
+        duration: 2000,
+        isClosable: true,
+      });
+      return;
+    }
+
     // Solo impedir precio menor a mercado en compra y cláusula, no en venta
     if ((action === "buy" || action === "clause") && player.market_value_num && Number(amount) < player.market_value_num) {
       toast({
