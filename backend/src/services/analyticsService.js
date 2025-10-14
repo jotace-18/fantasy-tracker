@@ -100,6 +100,10 @@ function getMarketHistoryStats(playerId) {
             
             const market_delta_3d = latestEuros > 0 ? (latestEuros - day3) / day3 : 0;
             const market_delta_7d = latestEuros > 0 ? (latestEuros - day7) / day7 : 0;
+            
+            // 🆕 ÚLTIMO CAMBIO DIARIO: diferencia absoluta con el registro anterior
+            const previousDayValue = rows[1]?.value || latestEuros;
+            const last_daily_change = latestEuros - previousDayValue; // En euros absolutos
 
             resolve({ 
                 volatility: vol, 
@@ -107,6 +111,7 @@ function getMarketHistoryStats(playerId) {
                 avg_value,
                 market_delta_3d,
                 market_delta_7d,
+                last_daily_change,  // 🆕 Cambio absoluto último día (para detectar "Cohete")
                 trend_future_normalized  // Valor original de linearTrend para debugging
             });
         });
@@ -470,7 +475,8 @@ async function getAdaptiveRecommendations(mode = 'overall', limit = 20, particip
 
                     // 🆕 v2.7: FILTROS DE ELEGIBILIDAD para modo market
                     // Excluir jugadores que NO cumplen criterios mínimos
-                    if (mode === 'market') {
+                    // 🐛 FIX: NO aplicar filtros si includeOwn=true (estamos analizando jugadores propios)
+                    if (mode === 'market' && !options.includeOwn) {
                         // 1. Filtrar jugadores MÁS CAROS que el dinero disponible
                         if (priceToPay > userMoney) {
                             return null; // No podemos permitirnos este jugador

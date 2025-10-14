@@ -105,28 +105,49 @@ function PlayerAssetCard({ player }) {
     };
 
     const TrendKpi = ({ trend, marketHistory = [], currentValue = 0 }) => {
-        // --- CALCULAR TENDENCIA DESDE HISTORIAL REAL ---
+        // --- CALCULAR ÚLTIMO CAMBIO DIARIO DESDE HISTORIAL REAL ---
         let trendValue = 0;
+        let lastDailyChange = 0;
         
-        // Calcular tendencia basada en el historial de mercado real
+        // Calcular último cambio basado en el historial de mercado real
         if (marketHistory && marketHistory.length > 1 && currentValue > 0) {
             const sortedHistory = [...marketHistory].sort((a, b) => new Date(b.date) - new Date(a.date));
-            const previousValue = sortedHistory.length > 1 ? sortedHistory[1].value : currentValue;
             
-            // Calcular cambio porcentual desde el último valor
-            const change = currentValue - previousValue;
-            trendValue = previousValue > 0 ? change / previousValue : 0;
+            // 🎯 ÚLTIMO CAMBIO: diferencia entre valor actual y el registro anterior
+            const previousValue = sortedHistory.length > 1 ? sortedHistory[1].value : currentValue;
+            lastDailyChange = currentValue - previousValue; // Cambio absoluto del último día
+            trendValue = previousValue > 0 ? lastDailyChange / previousValue : 0; // Porcentaje
         }
         
         // Si no hay historial suficiente, usar el valor del backend
         if (trendValue === 0 && trend) {
             trendValue = Number(trend) || 0;
+            lastDailyChange = currentValue * (trendValue / 100); // trend viene en porcentaje
         }
         
+        // 🚀 DETECTAR COHETE: Último cambio >€1M (brutal alza diaria)
+        const isMegaRocket = lastDailyChange > 1000000;
+        
         // Cualquier valor positivo = al alza, negativo = a la baja, exactamente 0 = estable
-        const trendIcon = trendValue > 0 ? '📈' : trendValue < 0 ? '📉' : '➡️';
-        const trendColor = trendValue > 0 ? 'green.500' : trendValue < 0 ? 'red.500' : 'orange.400';
-        const trendText = trendValue > 0 ? 'Al alza' : trendValue < 0 ? 'A la baja' : 'Estable';
+        let trendIcon, trendColor, trendText;
+        
+        if (isMegaRocket && trendValue > 0) {
+            trendIcon = '🚀';
+            trendColor = 'purple.500';
+            trendText = 'Cohete';
+        } else if (trendValue > 0) {
+            trendIcon = '📈';
+            trendColor = 'green.500';
+            trendText = 'Al alza';
+        } else if (trendValue < 0) {
+            trendIcon = '📉';
+            trendColor = 'red.500';
+            trendText = 'A la baja';
+        } else {
+            trendIcon = '➡️';
+            trendColor = 'orange.400';
+            trendText = 'Estable';
+        }
         // --- FIN DE LA CORRECCIÓN ---
 
         // Calcular cambios de valor basados en FECHAS REALES
@@ -203,10 +224,10 @@ function PlayerAssetCard({ player }) {
         const generateExportText = () => {
             const roi = player.roi || 0;
             const roiPct = (roi * 100).toFixed(1);
-            const marketValue = (player.market_value_num / 1000000).toFixed(2);
-            const buyPrice = (player.buy_price / 1000000).toFixed(2);
+            const marketValue = ((player.market_value_num || 0) / 1000000).toFixed(2);
+            const buyPrice = ((player.buy_price || 0) / 1000000).toFixed(2);
             const clauseValue = player.clause_value_num ? (player.clause_value_num / 1000000).toFixed(2) : 'N/A';
-            const trend = player.metrics?.trend_future ? (player.metrics.trend_future * 100).toFixed(2) : '0.00';
+            const trend = player.metrics?.trend_future ? (player.metrics.trend_future).toFixed(2) : '0.00';
 
             let text = `═══════════════════════════════════════
 📊 INFORME DE JUGADOR - FANTASY TRACKER
@@ -214,10 +235,10 @@ function PlayerAssetCard({ player }) {
 
 👤 INFORMACIÓN BÁSICA
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Nombre: ${player.player_name}
-Equipo: ${player.team_name}
-Posición: ${player.position}
-${player.days_since_buy >= 0 ? `Días desde compra: ${player.days_since_buy}\n` : ''}
+Nombre: ${player.player_name || 'N/A'}
+Equipo: ${player.team_name || 'N/A'}
+Posición: ${player.position || 'N/A'}
+${player.days_since_buy >= 0 && player.days_since_buy < 900 ? `Días desde compra: ${player.days_since_buy}\n` : ''}
 💰 ANÁLISIS FINANCIERO
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Precio de compra: ${buyPrice}M€
@@ -750,8 +771,14 @@ export default function PortfolioPlayersPage() {
         arr.sort((a, b) => {
             switch (sortKey) {
                 case 'POSITION':
-                    // Orden: POR -> DEF -> CEN -> DEL
-                    const positionOrder = { 'Portero': 1, 'Defensa': 2, 'Centrocampista': 3, 'Delantero': 4 };
+                    // Orden: POR -> DEF -> CEN/MED -> DEL
+                    const positionOrder = { 
+                        'Portero': 1, 
+                        'Defensa': 2, 
+                        'Centrocampista': 3, 
+                        'Mediocampista': 3,  // Alias para Centrocampista
+                        'Delantero': 4 
+                    };
                     const posA = positionOrder[a.position] || 999;
                     const posB = positionOrder[b.position] || 999;
                     if (posA !== posB) return posA - posB;

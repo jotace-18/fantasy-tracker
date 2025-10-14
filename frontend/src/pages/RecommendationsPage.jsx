@@ -28,36 +28,50 @@ const MomentumBadge = memo(({ momentum }) => (
   </Badge>
 ));
 
-const TrendBadge = memo(({ trend }) => {
-  // Escala clara de tendencias:
+const TrendBadge = memo(({ trend, lastDailyChange }) => {
+  // Escala clara de tendencias con detección de COHETE:
+  // COHETE: Último cambio >€1M (alza diaria brutal)
   // >3%: 🚀 Brutal (verde fuerte)
   // 1-3%: 📈 Buena (amarillo/naranja)
   // 0-1%: ➡️ Neutra (gris)
   // <0%: 📉 Negativa (rojo)
   
-  let color, icon, label;
+  let color, icon, label, text;
   
-  if (trend >= 3.0) {
+  // 🚀 DETECTAR COHETE: Último cambio diario >€1M
+  const isMegaRocket = lastDailyChange && lastDailyChange > 1000000;
+  
+  if (isMegaRocket) {
+    color = 'purple';
+    icon = '🚀';
+    text = 'Cohete';
+    label = `${trend.toFixed(1)}%`;
+  } else if (trend >= 3.0) {
     color = 'green';
     icon = '🚀';
+    text = null;
     label = `${trend.toFixed(1)}%`;
   } else if (trend >= 1.0) {
     color = 'orange';
     icon = '📈';
+    text = null;
     label = `${trend.toFixed(1)}%`;
   } else if (trend >= 0) {
     color = 'gray';
     icon = '➡️';
+    text = null;
     label = `${trend.toFixed(1)}%`;
   } else {
     color = 'red';
     icon = '📉';
+    text = null;
     label = `${trend.toFixed(1)}%`;
   }
   
   return (
     <Badge colorScheme={color} display="inline-flex" alignItems="center" gap={1}>
       <span>{icon}</span>
+      {text && <span style={{ fontWeight: 'bold' }}>{text}</span>}
       <span>{label}</span>
     </Badge>
   );
@@ -486,7 +500,7 @@ export default function RecommendationsPage() {
                   <Td textAlign='center'>
                     <MomentumBadge momentum={p.momentum} />
                   </Td>
-                  <Td textAlign='center'><TrendBadge trend={p.trend_future} /></Td>
+                  <Td textAlign='center'><TrendBadge trend={p.trend_future} lastDailyChange={p.last_daily_change} /></Td>
                   <Td textAlign='center'><VolatilityBadge v={p.volatility} /></Td>
                   <Td textAlign='center'>
                     <Badge colorScheme={p.market_delta?.includes('+') ? 'green' : 'red'}>
@@ -535,8 +549,8 @@ export default function RecommendationsPage() {
                       </Tooltip>
                     </Td>
                     <Td textAlign='center'>
-                      <Tooltip label={`Tendencia futura del valor: ${(p.trend_future ?? 0).toFixed(2)} (positiva sube, negativa baja)`}>
-                        <Text as='span'><TrendBadge trend={p.trend_future} /></Text>
+                      <Tooltip label={`Tendencia futura del valor: ${(p.trend_future ?? 0).toFixed(2)}% (positiva sube, negativa baja)`}>
+                        <Text as='span'><TrendBadge trend={p.trend_future} lastDailyChange={p.last_daily_change} /></Text>
                       </Tooltip>
                     </Td>
                     <Td textAlign='center'>

@@ -163,10 +163,11 @@ function determinePlayerMarketState(playerData) {
     }
     // NUEVO: Pilar Estratégico sin requisito de ROI (caso Fornals mejorado)
     // Prioriza rendimiento deportivo + tendencia + protección
-    if (is_good_performer && (is_trending_up || is_trending_up_mild) && has_decent_protection) {
+    // 🐛 FIX: NO considerar "Intocable" si ROI es muy negativo (>-20%)
+    if (is_good_performer && (is_trending_up || is_trending_up_mild) && has_decent_protection && roi > -0.20) {
          return {
             level: 1, status: "Intocable", color: "blue",
-            advice: `No se vende: Pilar Estratégico. Rendimiento sólido (${perf_score.toFixed(2)}), tendencia positiva (+${(trend_future*100).toFixed(1)}%) y bien protegido. Valor deportivo > financiero.`
+            advice: `No se vende: Pilar Estratégico. Rendimiento sólido (${perf_score.toFixed(2)}), tendencia positiva (+${trend_future.toFixed(1)}%) y bien protegido. Valor deportivo > financiero.`
         };
     }
     // Pilar Estratégico con buen ROI
@@ -189,27 +190,39 @@ function determinePlayerMarketState(playerData) {
     
     // CASO 1: Jugador con BUEN RENDIMIENTO + TENDENCIA AL ALZA + PROTECCIÓN → INTOCABLE
     // Esto cubre el caso Fornals: buen rendimiento, titular, tendencia al alza, cláusula alta
-    if (is_good_performer && is_trending_up && has_decent_protection) {
+    // 🐛 FIX: NO considerar "Intocable" si ROI es muy negativo (>-20%)
+    if (is_good_performer && is_trending_up && has_decent_protection && roi > -0.20) {
         return {
             level: 1, status: "Intocable", color: "blue",
-            advice: `� Activo Premium. Rendimiento sólido (${perf_score.toFixed(2)}), tendencia al alza (+${(trend_future*100).toFixed(1)}%), y bien protegido (margen ${((clause_value_num/market_value_num - 1)*100).toFixed(0)}%). No vender.`
+            advice: `� Activo Premium. Rendimiento sólido (${perf_score.toFixed(2)}), tendencia al alza (+${trend_future.toFixed(1)}%), y bien protegido (margen ${((clause_value_num/market_value_num - 1)*100).toFixed(0)}%). No vender.`
         };
     }
     
     // CASO 2: Caída histórica pero RECUPERACIÓN ACTIVA FUERTE → EN CRECIMIENTO
-    // Esto cubre el caso Domingos Duarte: cayó mucho pero ahora está subiendo
-    if ((severe_drop || catastrophic_drop) && is_trending_up && decent_momentum) {
+    // 🐛 FIX: Si ROI es muy negativo, necesitas tendencia BRUTAL para ser "En Crecimiento"
+    // Una tendencia de +1% NO es recuperación cuando perdiste -47%
+    if ((severe_drop || catastrophic_drop) && is_trending_up && decent_momentum && roi > -0.30) {
         return {
             level: 2, status: "En Crecimiento", color: "green",
-            advice: `� Recuperación activa. Aunque cayó ${(market_value_decline_from_peak_pct*100).toFixed(0)}% históricamente, HOY tiene tendencia al alza (+${(trend_future*100).toFixed(1)}%) y momentum ${(momentum*100).toFixed(0)}%. Dar tiempo.`
+            advice: `� Recuperación activa. Aunque cayó ${(market_value_decline_from_peak_pct*100).toFixed(0)}% históricamente, HOY tiene tendencia al alza (+${trend_future.toFixed(1)}%) y momentum ${(momentum*100).toFixed(0)}%. Dar tiempo.`
         };
     }
     
     // CASO 3: Caída histórica + recuperación leve + buen rendimiento → EN CRECIMIENTO
-    if ((severe_drop || catastrophic_drop) && is_trending_up_mild && (is_high_performer || good_momentum)) {
+    // 🐛 FIX: Similar validación para recuperación leve
+    if ((severe_drop || catastrophic_drop) && is_trending_up_mild && (is_high_performer || good_momentum) && roi > -0.30) {
         return {
             level: 2, status: "En Crecimiento", color: "green",
-            advice: `✅ En fase de recuperación. Cayó ${(market_value_decline_from_peak_pct*100).toFixed(0)}% pero muestra señales positivas (perf: ${perf_score.toFixed(2)}, tendencia: +${(trend_future*100).toFixed(1)}%). Mantener.`
+            advice: `✅ En fase de recuperación. Cayó ${(market_value_decline_from_peak_pct*100).toFixed(0)}% pero muestra señales positivas (perf: ${perf_score.toFixed(2)}, tendencia: +${trend_future.toFixed(1)}%). Mantener.`
+        };
+    }
+    
+    // 🆕 CASO 3.5: ROI MUY NEGATIVO con recuperación INSUFICIENTE → OPORTUNIDAD DE SALIDA
+    // Si perdiste >30% y la tendencia es débil (<5%), no es "crecimiento", es "buscar salida"
+    if (roi < -0.30 && trend_future > 0 && trend_future < 0.05 && !is_high_performer) {
+        return {
+            level: 3, status: "Oportunidad de Salida", color: "yellow",
+            advice: `⚠️ Pérdida significativa (ROI: ${(roi*100).toFixed(0)}%). La recuperación es muy lenta (+${trend_future.toFixed(1)}%/semana). Si aparece un comprador decente, considera vender para liberar capital.`
         };
     }
     
@@ -217,7 +230,7 @@ function determinePlayerMarketState(playerData) {
     if (catastrophic_drop && !is_trending_up_mild && momentum < 0.55) {
         return {
             level: 5, status: "Venta Urgente", color: "red",
-            advice: `� Colapso confirmado. Cayó ${(market_value_decline_from_peak_pct*100).toFixed(0)}% y NO muestra recuperación (tendencia: ${(trend_future*100).toFixed(1)}%, momentum: ${(momentum*100).toFixed(0)}%). Vender.`
+            advice: `� Colapso confirmado. Cayó ${(market_value_decline_from_peak_pct*100).toFixed(0)}% y NO muestra recuperación (tendencia: ${trend_future.toFixed(1)}%, momentum: ${(momentum*100).toFixed(0)}%). Vender.`
         };
     }
     
@@ -225,14 +238,15 @@ function determinePlayerMarketState(playerData) {
     if (severe_drop && trend_future < 0 && momentum < 0.50) {
         return {
             level: 4, status: "Venta Recomendada", color: "orange",
-            advice: `⚠️ Declive sostenido. Cayó ${(market_value_decline_from_peak_pct*100).toFixed(0)}%, tendencia negativa (${(trend_future*100).toFixed(1)}%) y bajo momentum (${(momentum*100).toFixed(0)}%). Considerar venta.`
+            advice: `⚠️ Declive sostenido. Cayó ${(market_value_decline_from_peak_pct*100).toFixed(0)}%, tendencia negativa (${trend_future.toFixed(1)}%) y bajo momentum (${(momentum*100).toFixed(0)}%). Considerar venta.`
         };
     }
     
     // CASO 3: Caída MODERADA (15-30%) → Contexto es clave
     if (moderate_drop) {
         // Si es alto performer con tendencia positiva → Solo vigilancia, no vender
-        if (is_high_performer && trend_future >= 0) {
+        // 🐛 FIX: NO considerar "En Crecimiento" si ROI es muy negativo
+        if (is_high_performer && trend_future >= 0 && roi > -0.25) {
             return {
                 level: 2, status: "En Crecimiento", color: "green",
                 advice: `✅ Corrección temporal. Cayó ${(market_value_decline_from_peak_pct*100).toFixed(0)}% pero es jugador de élite (${perf_score.toFixed(2)} perf) con tendencia neutra/positiva. Mantener.`
@@ -242,7 +256,7 @@ function determinePlayerMarketState(playerData) {
         if (roi > 0.40 && trend_future < -0.03) {
             return {
                 level: 4, status: "Venta Recomendada", color: "orange",
-                advice: `⚠️ Pico superado. ROI de ${(roi*100).toFixed(0)}% pero cayendo (-${Math.abs(trend_future*100).toFixed(1)}%/semana) y ya bajó ${(market_value_decline_from_peak_pct*100).toFixed(0)}%. Asegurar beneficios.`
+                advice: `⚠️ Pico superado. ROI de ${(roi*100).toFixed(0)}% pero cayendo (-${Math.abstrend_future.toFixed(1)}%/semana) y ya bajó ${(market_value_decline_from_peak_pct*100).toFixed(0)}%. Asegurar beneficios.`
             };
         }
     }
@@ -252,7 +266,7 @@ function determinePlayerMarketState(playerData) {
     if (profit_at_risk) {
         return {
             level: 4, status: "Venta Recomendada", color: "orange",
-            advice: `💰 ROI excelente (${(roi*100).toFixed(0)}%) en riesgo. Tendencia negativa (-${Math.abs(trend_future*100).toFixed(1)}%) y cláusula débil. Vender antes de perder ganancias.`
+            advice: `💰 ROI excelente (${(roi*100).toFixed(0)}%) en riesgo. Tendencia negativa (-${Math.abstrend_future.toFixed(1)}%) y cláusula débil. Vender antes de perder ganancias.`
         };
     }
     
@@ -270,7 +284,7 @@ function determinePlayerMarketState(playerData) {
     if (sustained_decline || (performance_is_declining && roi > 0 && trend_future < -0.03)) {
         return {
             level: 4, status: "Venta Recomendada", color: "orange",
-            advice: `📉 Declive sostenido. Bajo rendimiento (${perf_score.toFixed(2)}) + tendencia negativa (-${Math.abs(trend_future*100).toFixed(1)}%). Vender con ROI de ${(roi*100).toFixed(0)}% antes de pérdidas.`
+            advice: `📉 Declive sostenido. Bajo rendimiento (${perf_score.toFixed(2)}) + tendencia negativa (-${Math.abstrend_future.toFixed(1)}%). Vender con ROI de ${(roi*100).toFixed(0)}% antes de pérdidas.`
         };
     }
     
@@ -308,16 +322,18 @@ function determinePlayerMarketState(playerData) {
     const moderate_downtrend = trend_future < -0.02;
     
     // Nivel 2: EN CRECIMIENTO (verde) - Crecimiento activo confirmado
-    if (moderate_uptrend && (good_form || high_value_player)) {
+    // 🐛 FIX: NO considerar "En Crecimiento" si ROI es muy negativo (>-25%)
+    // Una tendencia de +1% NO es "crecimiento" cuando perdiste -47%
+    if (moderate_uptrend && (good_form || high_value_player) && roi > -0.25) {
         let growth_detail = '';
         if (high_value_player && strong_uptrend) {
-            growth_detail = ` Es un jugador de alto valor (${perf_score.toFixed(2)} perf) con tendencia alcista fuerte (+${(trend_future*100).toFixed(1)}%). ¡Deja que siga creciendo!`;
+            growth_detail = ` Es un jugador de alto valor (${perf_score.toFixed(2)} perf) con tendencia alcista fuerte (+${trend_future.toFixed(1)}%). ¡Deja que siga creciendo!`;
         } else if (excellent_form) {
             growth_detail = ` Forma excelente (${(momentum*100).toFixed(0)}% momentum) y tendencia positiva. Gran momento para mantener.`;
         } else if (strong_uptrend) {
-            growth_detail = ` Tendencia alcista sólida (+${(trend_future*100).toFixed(1)}%). Potencial de revalorización alto.`;
+            growth_detail = ` Tendencia alcista sólida (+${trend_future.toFixed(1)}%). Potencial de revalorización alto.`;
         } else {
-            growth_detail = ` En tendencia positiva (+${(trend_future*100).toFixed(1)}%) con buen rendimiento. Fase de crecimiento activo.`;
+            growth_detail = ` En tendencia positiva (+${trend_future.toFixed(1)}%) con buen rendimiento. Fase de crecimiento activo.`;
         }
         
         return {
@@ -335,7 +351,8 @@ function determinePlayerMarketState(playerData) {
     }
     
     // Rendimiento excelente aunque valor no suba (mantener por valor deportivo)
-    if (high_value_player && trend_future >= -0.02) {
+    // 🐛 FIX: NO considerar "En Crecimiento" si ROI es muy negativo
+    if (high_value_player && trend_future >= -0.02 && roi > -0.25) {
         return {
             level: 2, status: "En Crecimiento", color: "green",
             advice: `✅ Activo de alto valor deportivo. Rendimiento excelente (${perf_score.toFixed(2)}) aunque el mercado no lo refleje completamente. Mantener.`
@@ -348,11 +365,11 @@ function determinePlayerMarketState(playerData) {
     if (mild_uptrend && roi > -0.60) {
         let detail = '';
         if (roi < 0 && roi > -0.50) {
-            detail = ` Recuperándose de una caída (ROI: ${(roi*100).toFixed(0)}%) con señales tempranas de rebote (+${(trend_future*100).toFixed(2)}%). Dar tiempo para consolidar.`;
+            detail = ` Recuperándose de una caída (ROI: ${(roi*100).toFixed(0)}%) con señales tempranas de rebote (+${trend_future.toFixed(2)}%). Dar tiempo para consolidar.`;
         } else if (roi < -0.50) {
-            detail = ` En fase inicial de recuperación tras gran caída (ROI: ${(roi*100).toFixed(0)}%). Tendencia positiva emergente (+${(trend_future*100).toFixed(2)}%).`;
+            detail = ` En fase inicial de recuperación tras gran caída (ROI: ${(roi*100).toFixed(0)}%). Tendencia positiva emergente (+${trend_future.toFixed(2)}%).`;
         } else {
-            detail = ` Tendencia alcista emergente (+${(trend_future*100).toFixed(2)}%) con forma decente. En las primeras fases de revalorización.`;
+            detail = ` Tendencia alcista emergente (+${trend_future.toFixed(2)}%) con forma decente. En las primeras fases de revalorización.`;
         }
         
         return {
@@ -367,7 +384,7 @@ function determinePlayerMarketState(playerData) {
     if (mild_downtrend || (trend_future < -0.02 && trend_future >= -0.04)) {
         return {
             level: 3.5, status: "Inicio de Decrecimiento", color: "orange",
-            advice: `⚠️ Primeras señales de deterioro. Tendencia negativa (${(trend_future*100).toFixed(1)}%), ROI ${(roi*100).toFixed(0)}%. Vigilar de cerca las próximas jornadas antes de que empeore.`
+            advice: `⚠️ Primeras señales de deterioro. Tendencia negativa (${trend_future.toFixed(1)}%), ROI ${(roi*100).toFixed(0)}%. Vigilar de cerca las próximas jornadas antes de que empeore.`
         };
     }
     
@@ -376,7 +393,7 @@ function determinePlayerMarketState(playerData) {
     if (Math.abs(trend_future) < 0.005 && roi > -0.30 && roi < 0.30) {
         return {
             level: 3, status: "Medianamente Vendible", color: "yellow",
-            advice: `⚠️ Sin señales claras. Tendencia neutra (${(trend_future*100).toFixed(2)}%), ROI ${(roi*100).toFixed(0)}%. Evaluar opciones de venta.`
+            advice: `⚠️ Sin señales claras. Tendencia neutra (${trend_future.toFixed(2)}%), ROI ${(roi*100).toFixed(0)}%. Evaluar opciones de venta.`
         };
     }
     
@@ -385,7 +402,7 @@ function determinePlayerMarketState(playerData) {
     if (trend_future < 0) {
         return {
             level: 3.5, status: "Inicio de Decrecimiento", color: "orange",
-            advice: `📉 Tendencia negativa (${(trend_future*100).toFixed(1)}%), ROI ${(roi*100).toFixed(0)}%. El valor está cayendo, vigilar de cerca.`
+            advice: `📉 Tendencia negativa (${trend_future.toFixed(1)}%), ROI ${(roi*100).toFixed(0)}%. El valor está cayendo, vigilar de cerca.`
         };
     }
     
@@ -393,7 +410,7 @@ function determinePlayerMarketState(playerData) {
     // Es porque tiene ROI muy negativo o mal rendimiento → Medianamente vendible
     return {
         level: 3, status: "Medianamente Vendible", color: "yellow",
-        advice: `⚠️ Situación mixta. Tendencia positiva (+${(trend_future*100).toFixed(1)}%) pero ROI ${(roi*100).toFixed(0)}% indica problemas previos. Evaluar cuidadosamente.`
+        advice: `⚠️ Situación mixta. Tendencia positiva (+${trend_future.toFixed(1)}%) pero ROI ${(roi*100).toFixed(0)}% indica problemas previos. Evaluar cuidadosamente.`
     };
 }
 
@@ -556,8 +573,10 @@ async function getPlayerInsights(participantId = MY_ID) {
         const has_external_risk = stats.risk_level >= 4;
         
         // RECUPERACIÓN: ROI negativo PERO con señales claras de mejora
+        // 🐛 FIX: Si la pérdida es muy grande (ROI < -30%), necesitas tendencia BRUTAL para justificar mantener
         const is_recovering_investment = (
             roi < 0 && 
+            roi > -0.30 && // 🆕 NO considerar "recuperación" si perdiste >30%
             !is_recent_investment &&
             stats.trend_future > 0.03 && // Tendencia claramente positiva
             (stats.momentum > 0.55 || market_delta_7d > 0.05) && // Forma mejorando
