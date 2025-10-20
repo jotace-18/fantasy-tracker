@@ -2,10 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 // Hook principal de recomendaciones
 export default function useRecommendationsData() {
-  const [data, setData] = useState([]);
+  const [allPlayers, setAllPlayers] = useState([]); // ✨ TODOS los jugadores con score
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [mode, setMode] = useState('overall');
+  const [mode, setMode] = useState('market'); // 💰 Modo por defecto: Broker de Mercado
   const [money, setMoney] = useState(null);
 
   const participantId = 8; // ID fijo para pruebas
@@ -40,9 +40,13 @@ export default function useRecommendationsData() {
     abortRef.current = controller;
 
     try {
-      const res = await fetch(`/api/analytics/recommendations?mode=${mode}&participant_id=${participantId}`, {
-        signal: controller.signal,
-      });
+      // 🚀 NUEVA ESTRATEGIA: Traer TODOS los jugadores con score calculado
+      // Usa el caché del backend (5 min), así la búsqueda es instantánea
+      const res = await fetch(
+        `/api/analytics/recommendations?mode=${mode}&participant_id=${participantId}&all=true`,
+        { signal: controller.signal }
+      );
+      
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
       const rows = Array.isArray(json?.data) ? json.data : [];
@@ -55,7 +59,8 @@ export default function useRecommendationsData() {
         sell_score: Number(r.score ?? 0),
       }));
 
-      setData(normalized);
+      setAllPlayers(normalized); // Guardamos TODOS los jugadores
+      console.log(`[useRecommendationsData] ✅ Cargados ${normalized.length} jugadores (cached: ${json.cached || false})`);
     } catch (e) {
       if (e.name !== 'AbortError') setError(e.message || String(e));
     } finally {
@@ -72,22 +77,29 @@ export default function useRecommendationsData() {
 
   /* --------------------------- 🔹 Filtros y orden --------------------------- */
   const filtered = useMemo(() => {
-    let out = data;
+    let out = allPlayers; // Ahora filtramos sobre TODOS los jugadores
     const q = query.trim().toLowerCase();
+    
+    // 🔍 BÚSQUEDA: Filtra por nombre o equipo
     if (q) {
       out = out.filter(p =>
         (p.name || '').toLowerCase().includes(q) ||
         (p.team_name || '').toLowerCase().includes(q)
       );
     }
+    
+    // 🛡️ FILTRO: Riesgo < 3
     if (riskUnder3 && mode !== 'sell') {
       out = out.filter(p => (p.risk_level_num ?? 99) < 3);
     }
+    
+    // 👔 FILTRO: Solo titulares probables
     if (onlyProbableXI && mode !== 'sell') {
       out = out.filter(p => (p.titular_next_jor ?? 0) >= 0.5);
     }
+    
     return out;
-  }, [data, query, riskUnder3, onlyProbableXI, mode]);
+  }, [allPlayers, query, riskUnder3, onlyProbableXI, mode]);
 
   const sorted = useMemo(() => {
     const { field, dir } = sort;
@@ -104,6 +116,24 @@ export default function useRecommendationsData() {
     return copy;
   }, [filtered, sort]);
 
+  // 🎯 LÓGICA DE VISUALIZACIÓN:
+  // - Si NO hay búsqueda activa: Mostrar solo TOP 10
+  // - Si HAY búsqueda: Mostrar TODOS los resultados filtrados
+  const displayData = useMemo(() => {
+    const hasSearch = query.trim().length > 0;
+    
+    if (hasSearch) {
+      // Con búsqueda: mostrar todos los resultados
+      console.log(`[useRecommendationsData] 🔍 Búsqueda activa: mostrando ${sorted.length} resultados`);
+      return sorted;
+    } else {
+      // Sin búsqueda: solo top 10
+      const top10 = sorted.slice(0, 10);
+      console.log(`[useRecommendationsData] 📊 Vista normal: mostrando top ${top10.length} de ${allPlayers.length}`);
+      return top10;
+    }
+  }, [sorted, query, allPlayers.length]);
+
   const toggleSort = (field, defaultOrder = 'ASC') => {
     setSort(prev =>
       prev.field !== field
@@ -113,7 +143,7 @@ export default function useRecommendationsData() {
   };
 
   return {
-    data: sorted,
+    data: displayData, // Retornamos displayData en lugar de sorted
     loading,
     error,
     query, setQuery,
@@ -123,5 +153,9 @@ export default function useRecommendationsData() {
     mode, setMode,
     money,
     refresh: fetchData,
+    // 📊 Métricas adicionales para mostrar info al usuario
+    totalPlayers: allPlayers.length,
+    filteredCount: sorted.length,
+    isSearchActive: query.trim().length > 0,
   };
 }

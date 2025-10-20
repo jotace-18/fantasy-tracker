@@ -790,6 +790,18 @@ export default function PortfolioPlayersPage() {
                     const xiA = a.xi_recommendation?.xi_priority || 0;
                     const xiB = b.xi_recommendation?.xi_priority || 0;
                     return xiB - xiA;
+                case 'MARKET_GROWTH':
+                    // Crecimiento reciente: cambio del último día (valor actual - valor anterior)
+                    const getLastDailyChange = (player) => {
+                        if (!player.market_history || player.market_history.length < 2) return 0;
+                        const sorted = [...player.market_history].sort((a, b) => new Date(b.date) - new Date(a.date));
+                        const current = player.market_value_num || 0;
+                        const previous = sorted.length > 1 ? sorted[1].value : current;
+                        return current - previous;
+                    };
+                    const changeA = getLastDailyChange(a);
+                    const changeB = getLastDailyChange(b);
+                    return changeB - changeA;
                 case 'ROI':
                     return (b.roi || 0) - (a.roi || 0);
                 case 'VALUE':
@@ -923,6 +935,7 @@ export default function PortfolioPlayersPage() {
                             <option value='POSITION'>Por Posición (POR→DEL)</option>
                             <option value='XI_PRIORITY'>Prioridad XI</option>
                             <option value='VENDIBILITY_LEVEL'>Urgencia Venta</option>
+                            <option value='MARKET_GROWTH'>Mayor Crecimiento (€)</option>
                             <option value='ROI'>Mayor ROI</option>
                             <option value='VALUE'>Mayor Valor</option>
                             <option value='CLAUSE_URGENCY'>Urgencia Cláusula</option>

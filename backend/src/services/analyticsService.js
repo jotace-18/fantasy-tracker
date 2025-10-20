@@ -29,6 +29,8 @@
 const db = require("../db/db");
 const axios = require("axios");
 const contextCache = new Map();
+const recommendationsCache = new Map(); // ✨ Caché para recomendaciones completas
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutos
 const {
     normalize,
     mean,
@@ -92,6 +94,15 @@ function getMarketHistoryStats(playerId) {
             // Para convertirlo a % diario multiplicamos por 100
             const trend_future = trend_future_normalized * 100; // Convertir a %
             
+            // 🆕 v2.6: TENDENCIA RECIENTE (últimos 3 días)
+            // Usamos solo los últimos 3 valores para tener una visión más actual
+            const recentValues = valuesInEuros.slice(-3); // Últimos 3 días
+            let trend_recent_3d = 0;
+            if (recentValues.length >= 2) {
+                const trend_recent_normalized = linearTrend(recentValues);
+                trend_recent_3d = trend_recent_normalized * 100; // % diario en últimos 3 días
+            }
+            
             const latestEuros = rows[0]?.value || 0;
             
             // Calculamos cambios en 3 y 7 días para timing
@@ -107,11 +118,12 @@ function getMarketHistoryStats(playerId) {
 
             resolve({ 
                 volatility: vol, 
-                trend_future, 
+                trend_future,        // Tendencia 10 días (promedio histórico)
+                trend_recent_3d,     // 🆕 Tendencia últimos 3 días (momento actual)
                 avg_value,
                 market_delta_3d,
                 market_delta_7d,
-                last_daily_change,  // 🆕 Cambio absoluto último día (para detectar "Cohete")
+                last_daily_change,   // 🆕 Cambio absoluto último día (para detectar "Cohete")
                 trend_future_normalized  // Valor original de linearTrend para debugging
             });
         });
@@ -302,49 +314,66 @@ function getParticipantMoney(participantId) {
  * - -0.3% diario = -2% semanal = MALO (score ~-0.45)
  * - -0.5% diario = -3.5% semanal = MUY MALO (score ~-0.70)
  */
-function transformTrendScore(trend_future_percent, market_value_num = 0) {
-    if (trend_future_percent >= 0) {
-        // 🚀 TENDENCIAS POSITIVAS: Mapeo no lineal con amplificación
-        // Normalizamos el % diario a escala 0-1
-        // Consideramos +1.5% diario como máximo realista (score = 1.0)
-        const normalized = Math.min(trend_future_percent / 1.5, 1.0);
+/**
+ * Transforma la tendencia de mercado en un score normalizado (-1 a +1)
+ * 🆕 v2.5: DA PRIORIDAD al cambio del último día, luego tendencia de 10 días
+ * 
+ * FILOSOFÍA: El último día/últimos 2 días son lo MÁS IMPORTANTE
+ * 
+ * @param {number} trend_future_percent - Tendencia en % (ej: 0.5 = +0.5% diario promedio 10 días)
+ * @param {number} market_value_num - Valor actual de mercado en euros
+ * @param {number} last_daily_change - Cambio absoluto del último día en euros
+ */
+function transformTrendScore(trend_future_percent, market_value_num = 0, last_daily_change = 0) {
+    // ⚡ PASO 1: Calcular score del ÚLTIMO DÍA (peso 70%)
+    let recentScore = 0;
+    const lastDayPercentage = market_value_num > 0 ? (last_daily_change / market_value_num) * 100 : 0;
+    
+    if (lastDayPercentage >= 0) {
+        // Positivo: Bonus por cambio reciente
+        const normalized = Math.min(lastDayPercentage / 2.0, 1.0); // 2% = máximo
+        recentScore = Math.pow(normalized, 0.5) * 0.7; // Peso 70%
         
-        // Aplicamos curva exponencial para amplificar tendencias fuertes
-        const baseScore = Math.pow(normalized, 0.6); // Curva convexa
-        
-        // Bonus extra para tendencias excepcionales
-        let magnitudeBonus = 0;
-        if (trend_future_percent > 1.0) {
-            magnitudeBonus = 0.20; // +20% para cohetes (>7% semanal)
-        } else if (trend_future_percent > 0.7) {
-            magnitudeBonus = 0.15; // +15% para excelentes (>5% semanal)
-        } else if (trend_future_percent > 0.5) {
-            magnitudeBonus = 0.10; // +10% para muy buenos (>3.5% semanal)
-        } else if (trend_future_percent > 0.3) {
-            magnitudeBonus = 0.05; // +5% para buenos (>2% semanal)
+        // 🚀 BONUS EXTRA por cambio absoluto BRUTAL
+        if (last_daily_change > 2000000) {
+            recentScore = Math.min(recentScore + 0.25, 1.0); // +€2M/día
+            console.log(`🚀 COHETE BRUTAL: +${(last_daily_change/1000000).toFixed(2)}M€/día = +${lastDayPercentage.toFixed(2)}% - Score reciente: ${recentScore.toFixed(2)}`);
+        } else if (last_daily_change > 1000000) {
+            recentScore = Math.min(recentScore + 0.20, 1.0); // +€1M/día
+            console.log(`🚀 COHETE: +${(last_daily_change/1000000).toFixed(2)}M€/día = +${lastDayPercentage.toFixed(2)}% - Score reciente: ${recentScore.toFixed(2)}`);
+        } else if (last_daily_change > 500000) {
+            recentScore = Math.min(recentScore + 0.10, 0.9); // +€500K/día
         }
-        
-        return Math.min(baseScore + magnitudeBonus, 1.0);
-        
     } else {
-        // 📉 TENDENCIAS NEGATIVAS: Penalización severa
-        // Normalizamos: -1.0% diario = score -1.0
-        const normalized = Math.max(trend_future_percent / 1.0, -1.0);
-        
-        // Penalización cuadrática (más severa)
-        const basePenalty = -Math.pow(Math.abs(normalized), 1.2);
-        
-        // Penalización extra para jugadores caros perdiendo valor
-        // (inversiones grandes cayendo son más peligrosas)
-        let valuePenalty = 0;
-        if (market_value_num > 10_000_000) {
-            valuePenalty = -0.15; // -15% extra para >10M
-        } else if (market_value_num > 5_000_000) {
-            valuePenalty = -0.08; // -8% extra para >5M
-        }
-        
-        return Math.max(basePenalty + valuePenalty, -1.0);
+        // Negativo: Penalización por caída reciente
+        const normalized = Math.max(lastDayPercentage / -2.0, -1.0);
+        recentScore = -Math.pow(Math.abs(normalized), 1.2) * 0.7; // Penalización cuadrática, peso 70%
     }
+    
+    // 📊 PASO 2: Calcular score de TENDENCIA HISTÓRICA (10 días, peso 30%)
+    let trendScore = 0;
+    if (trend_future_percent >= 0) {
+        const normalized = Math.min(trend_future_percent / 1.5, 1.0);
+        trendScore = Math.pow(normalized, 0.6) * 0.3; // Peso 30%
+        
+        // Bonus por tendencia sostenida alta
+        if (trend_future_percent > 1.0) trendScore += 0.05; // +1%/día sostenido = excelente
+    } else {
+        const normalized = Math.max(trend_future_percent / -1.0, -1.0);
+        trendScore = -Math.pow(Math.abs(normalized), 1.2) * 0.3; // Peso 30%
+    }
+    
+    // 🎯 PASO 3: COMBINAR ambos scores
+    let finalScore = recentScore + trendScore;
+    
+    // 🛡️ PASO 4: Penalización extra para jugadores caros cayendo
+    if (last_daily_change < 0 && market_value_num > 10_000_000) {
+        finalScore -= 0.15; // Penalización extra: jugador caro perdiendo valor
+    } else if (last_daily_change < 0 && market_value_num > 5_000_000) {
+        finalScore -= 0.08; // Penalización menor para jugadores de gama media
+    }
+    
+    return Math.max(Math.min(finalScore, 1.0), -1.0); // Clamp entre -1 y +1
 }
 
 /**
@@ -425,11 +454,25 @@ function getSuggestedBid(marketValue, score) {
 
 /**
  * --------------------------------------------------------------------------
- * FUNCIÓN PRINCIPAL: Recomendaciones dinámicas - ¡MODIFICADA!
+ * FUNCIÓN PRINCIPAL: Recomendaciones dinámicas - ¡MODIFICADA CON CACHÉ!
  * --------------------------------------------------------------------------
  */
 async function getAdaptiveRecommendations(mode = 'overall', limit = 20, participantId = 8, options = {}) {
     return new Promise((resolve, reject) => {
+        // 🚀 CACHÉ: Verificar si ya tenemos resultados recientes para este modo + participante
+        const cacheKey = `${mode}_${participantId}_${options.excludeOwned || false}`;
+        const cached = recommendationsCache.get(cacheKey);
+        const now = Date.now();
+        
+        if (cached && (now - cached.timestamp) < CACHE_DURATION) {
+            console.log(`[Analytics] ✅ Cache HIT para ${cacheKey} - ${cached.data.length} jugadores`);
+            // Retornar desde caché, aplicando el limit solo si se solicita
+            const result = limit > 0 ? cached.data.slice(0, limit) : cached.data;
+            return resolve(result);
+        }
+        
+        console.log(`[Analytics] ⚙️ Cache MISS - Calculando ${cacheKey}...`);
+        
         const query = `
             SELECT
                 p.id, p.name, p.position, t.name AS team_name, p.team_id,
@@ -519,6 +562,20 @@ async function getAdaptiveRecommendations(mode = 'overall', limit = 20, particip
 
                     let score = 0;
                     const lesionado = Number(p.lesionado ?? 0);
+                    
+                    // 🐛 DEBUG: Log temporal para Antony
+                    if (p.name && p.name.toLowerCase().includes('antony')) {
+                        console.log('🔍 DEBUG Antony:', {
+                            name: p.name,
+                            market_value_num: playerData.market_value_num,
+                            trend_future: playerData.trend_future,
+                            last_daily_change: playerData.last_daily_change,
+                            momentum: playerData.momentum,
+                            titular_next_jor: playerData.titular_next_jor,
+                            lesionado: lesionado,
+                            avg_points_last3: playerData.avg_points_last3
+                        });
+                    }
 
                     // --- CÁLCULO DE SCORE POR MODO ---
                     if (mode === 'market') {
@@ -527,8 +584,18 @@ async function getAdaptiveRecommendations(mode = 'overall', limit = 20, particip
                         // 🆕 v2.1: TENDENCIA AMPLIFICADA - Recompensa mucho más las tendencias fuertes
                         const financialRisk = getWeightedFinancialRisk(playerData, userMoney);
                         
-                        // 🆕 v2.1: Transformar tendencia con curva no lineal
-                        const trendScore = transformTrendScore(playerData.trend_future, playerData.market_value_num);
+                        // 🆕 v2.4: Transformar tendencia considerando cambio absoluto y porcentual
+                        const trendScore = transformTrendScore(
+                            playerData.trend_future, 
+                            playerData.market_value_num,
+                            playerData.last_daily_change || 0  // Cambio absoluto del último día
+                        );
+                        
+                        // 🆕 v2.6: ADAPTACIÓN DINÁMICA DE PESOS según magnitud del cohete
+                        // Si es un cohete brutal (>€1M/día), la infravaloración importa MUCHO MENOS
+                        // Porque lo que importa es la REVALORIZACIÓN, no los puntos actuales
+                        const isRocket = playerData.last_daily_change > 1000000;
+                        const isMegaRocket = playerData.last_daily_change > 2000000;
                         
                         // 🆕 v2.3: TENDENCIA ES REY - Peso dramáticamente aumentado
                         // El objetivo principal es REVALORIZACIÓN, no solo buenos jugadores
@@ -541,11 +608,24 @@ async function getAdaptiveRecommendations(mode = 'overall', limit = 20, particip
                         const bubble = detectBubble(playerData);
                         const timing = getTimingScore(playerData);
                         
-                        // 🆕 v2.3: Pesos reducidos para dar más protagonismo a la tendencia
-                        // Objetivo: Si no sube de valor, no interesa aunque sea "bueno"
-                        const adjustedWeights = playerData.trend_future >= 0 
-                            ? { undervalue: 0.12, momentum: 0.08, titular: 0.08, risk: 0.04, volatility: 0.03 }  // Total: 35%
-                            : { undervalue: 0.18, momentum: 0.12, titular: 0.10, risk: 0.08, volatility: 0.07 }; // Total: 55% (compensa algo la tendencia negativa)
+                        // 🆕 v2.6: Pesos adaptativos según si es COHETE o no
+                        let adjustedWeights;
+                        if (isMegaRocket) {
+                            // COHETE MEGA (>€2M/día): Infravaloración casi irrelevante (2%)
+                            adjustedWeights = playerData.trend_future >= 0 
+                                ? { undervalue: 0.02, momentum: 0.12, titular: 0.12, risk: 0.05, volatility: 0.04 }  // Total: 35%
+                                : { undervalue: 0.08, momentum: 0.15, titular: 0.12, risk: 0.10, volatility: 0.10 }; // Total: 55%
+                        } else if (isRocket) {
+                            // COHETE (>€1M/día): Infravaloración poco importante (5%)
+                            adjustedWeights = playerData.trend_future >= 0 
+                                ? { undervalue: 0.05, momentum: 0.10, titular: 0.10, risk: 0.05, volatility: 0.05 }  // Total: 35%
+                                : { undervalue: 0.12, momentum: 0.13, titular: 0.12, risk: 0.10, volatility: 0.08 }; // Total: 55%
+                        } else {
+                            // NORMAL: Pesos estándar
+                            adjustedWeights = playerData.trend_future >= 0 
+                                ? { undervalue: 0.12, momentum: 0.08, titular: 0.08, risk: 0.04, volatility: 0.03 }  // Total: 35%
+                                : { undervalue: 0.18, momentum: 0.12, titular: 0.10, risk: 0.08, volatility: 0.07 }; // Total: 55%
+                        }
                         
                         score =
                             (trendScore * trendWeight) +             // 🔥 TENDENCIA ADAPTATIVA: 50% (positivo) / 35% (negativo)
@@ -666,9 +746,19 @@ async function getAdaptiveRecommendations(mode = 'overall', limit = 20, particip
             }));
 
             const valid = results.filter(r => r && !isNaN(r.score));
-            const sorted = valid.sort((a, b) => b.score - a.score).slice(0, limit);
+            const sorted = valid.sort((a, b) => b.score - a.score);
             
-            resolve(sorted);
+            // 🗄️ GUARDAR EN CACHÉ todos los jugadores ordenados
+            recommendationsCache.set(cacheKey, { 
+                data: sorted, 
+                timestamp: Date.now() 
+            });
+            
+            console.log(`[Analytics] 💾 Caché actualizado: ${sorted.length} jugadores - Válido por ${CACHE_DURATION/1000}s`);
+            
+            // Retornar solo el top N si se especifica limit
+            const result = limit > 0 ? sorted.slice(0, limit) : sorted;
+            resolve(result);
         });
     });
 }

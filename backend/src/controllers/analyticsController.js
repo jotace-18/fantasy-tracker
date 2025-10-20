@@ -19,6 +19,7 @@ exports.getAdaptiveRecommendations = async (req, res) => {
   const mode = (req.query.mode || "overall").toLowerCase();
   const limit = Number(req.query.limit || 20);
   const participantId = Number(req.query.participant_id || 8);
+  const all = req.query.all === 'true'; // ✨ Nuevo parámetro para traer todos
 
   // 🧠 Añadimos "sell" como modo válido
   if (!["overall", "performance", "market", "sell"].includes(mode)) {
@@ -26,15 +27,17 @@ exports.getAdaptiveRecommendations = async (req, res) => {
   }
 
   try {
-    console.log(`[AnalyticsController] Generando recomendaciones [mode=${mode}] [limit=${limit}] [participant=${participantId}]`);
-    const data = await analyticsService.getAdaptiveRecommendations(mode, limit, participantId);
+    const effectiveLimit = all ? 0 : limit; // limit=0 significa "todos"
+    console.log(`[AnalyticsController] Generando recomendaciones [mode=${mode}] [limit=${all ? 'ALL' : limit}] [participant=${participantId}]`);
+    const data = await analyticsService.getAdaptiveRecommendations(mode, effectiveLimit, participantId);
 
     res.json({
       success: true,
       mode,
-      limit,
+      limit: all ? 'all' : limit,
       participantId,
       count: data?.length || 0,
+      cached: data?._cached || false, // Indicador si vino del caché
       generated_at: new Date().toISOString(),
       data,
     });

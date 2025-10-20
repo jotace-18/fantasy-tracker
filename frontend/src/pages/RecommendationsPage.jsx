@@ -28,13 +28,17 @@ const MomentumBadge = memo(({ momentum }) => (
   </Badge>
 ));
 
-const TrendBadge = memo(({ trend, lastDailyChange }) => {
+const TrendBadge = memo(({ trend, lastDailyChange, trendRecent }) => {
   // Escala clara de tendencias con detección de COHETE:
   // COHETE: Último cambio >€1M (alza diaria brutal)
   // >3%: 🚀 Brutal (verde fuerte)
   // 1-3%: 📈 Buena (amarillo/naranja)
   // 0-1%: ➡️ Neutra (gris)
   // <0%: 📉 Negativa (rojo)
+  
+  // 🆕 Priorizar tendencia reciente (3d) si está disponible
+  const displayTrend = trendRecent != null ? trendRecent : trend;
+  const isRecent = trendRecent != null;
   
   let color, icon, label, text;
   
@@ -45,27 +49,27 @@ const TrendBadge = memo(({ trend, lastDailyChange }) => {
     color = 'purple';
     icon = '🚀';
     text = 'Cohete';
-    label = `${trend.toFixed(1)}%`;
-  } else if (trend >= 3.0) {
+    label = `${displayTrend.toFixed(1)}%`;
+  } else if (displayTrend >= 3.0) {
     color = 'green';
     icon = '🚀';
     text = null;
-    label = `${trend.toFixed(1)}%`;
-  } else if (trend >= 1.0) {
+    label = `${displayTrend.toFixed(1)}%`;
+  } else if (displayTrend >= 1.0) {
     color = 'orange';
     icon = '📈';
     text = null;
-    label = `${trend.toFixed(1)}%`;
-  } else if (trend >= 0) {
+    label = `${displayTrend.toFixed(1)}%`;
+  } else if (displayTrend >= 0) {
     color = 'gray';
     icon = '➡️';
     text = null;
-    label = `${trend.toFixed(1)}%`;
+    label = `${displayTrend.toFixed(1)}%`;
   } else {
     color = 'red';
     icon = '📉';
     text = null;
-    label = `${trend.toFixed(1)}%`;
+    label = `${displayTrend.toFixed(1)}%`;
   }
   
   return (
@@ -73,6 +77,7 @@ const TrendBadge = memo(({ trend, lastDailyChange }) => {
       <span>{icon}</span>
       {text && <span style={{ fontWeight: 'bold' }}>{text}</span>}
       <span>{label}</span>
+      {isRecent && <span style={{ fontSize: '0.7em', opacity: 0.7 }}>3d</span>}
     </Badge>
   );
 });
@@ -198,7 +203,10 @@ export default function RecommendationsPage() {
     riskUnder3, setRiskUnder3,
     onlyProbableXI, setOnlyProbableXI,
     mode, setMode,
-    money
+    money,
+    totalPlayers,
+    filteredCount,
+    isSearchActive,
   } = useRecommendationsData();
 
   const { isOpen, onOpen, onClose } = useDisclosure();
@@ -218,43 +226,82 @@ export default function RecommendationsPage() {
     summary += '='.repeat(80) + '\n\n';
     
     top10.forEach((player, index) => {
-      // Formatear disponibilidad
-      let availabilityText = 'N/A';
-      if (player.availability_status === 'market') availabilityText = '🛒 Mercado';
-      else if (player.availability_status === 'bank') availabilityText = '🏦 Banco';
-      else if (player.availability_status === 'owned_clausulable') availabilityText = '🔓 Clausulable (Tuyo)';
-      else if (player.availability_status === 'owned_not_clausulable') availabilityText = '🔒 No Clausulable (Tuyo)';
-      else if (player.availability_status === 'owned_other') availabilityText = '👤 Otro manager';
-      
-      summary += `#${index + 1}. ${player.name || 'N/A'}\n`;
-      summary += `   📈 Score: ${(player.score || 0).toFixed(2)}\n`;
-      summary += `   💰 Precio a pagar: €${(player.price_to_pay || 0).toLocaleString('es-ES')}\n`;
-      summary += `   📦 Disponibilidad: ${availabilityText}\n`;
-      summary += `   📊 Tendencia: ${(player.trend_future || 0).toFixed(2)}%\n`;
-      summary += `   💎 Infravaloración: ${((player.undervalue_factor || 0) * 100).toFixed(0)}%\n`;
-      summary += `   ⚡ Momentum: ${((player.momentum || 0) * 100).toFixed(0)}%\n`;
-      summary += `   👤 Titular próxima jornada: ${((player.titular_next_jor || 0) * 100).toFixed(0)}%\n`;
-      summary += `   🎯 Factor contexto: ${(player.context_factor || 0).toFixed(2)}x\n`;
-      summary += `   📉 Volatilidad: ${(player.volatility || 0).toFixed(2)}%\n`;
-      summary += `   ⚠️ Riesgo: ${(player.risk_level_num || 0).toFixed(1)}/5\n`;
-      summary += `   🏟️ Equipo: ${player.team_name || 'N/A'}\n`;
-      summary += `   📅 Próximo rival: ${player.next_opponent || 'N/A'} (${player.next_location === 'home' ? '🏠 Casa' : '✈️ Fuera'})\n`;
-      summary += `   💵 Oferta sugerida: €${(player.suggested_bid || 0).toLocaleString('es-ES')}\n`;
-      if (player.catalyst && player.catalyst.has_catalyst) {
-        const bonusPercent = Math.round((player.catalyst.bonus || 0) * 100);
-        summary += `   ⚡ CATALIZADOR: ${player.catalyst.reasoning} (+${bonusPercent}%)\n`;
-      }
-      if (player.bubble && player.bubble.is_bubble) {
-        const penaltyPercent = Math.abs(Math.round((player.bubble.penalty || 0) * 100));
-        summary += `   ⚠️ BURBUJA: ${player.bubble.reasoning} (-${penaltyPercent}%)\n`;
-      }
-      summary += '\n';
+      summary += generatePlayerSummary(player, index + 1);
     });
     
     summary += '='.repeat(80) + '\n';
     summary += `Generado: ${new Date().toLocaleString('es-ES')}\n`;
     summary += `Tu dinero disponible: €${(money || 0).toLocaleString('es-ES')}\n`;
     
+    return summary;
+  };
+
+  const generatePlayerSummary = (player, position = null) => {
+    // Formatear disponibilidad
+    let availabilityText = 'N/A';
+    if (player.availability_status === 'market') availabilityText = '🛒 Mercado';
+    else if (player.availability_status === 'bank') availabilityText = '🏦 Banco';
+    else if (player.availability_status === 'owned_clausulable') availabilityText = '🔓 Clausulable (Tuyo)';
+    else if (player.availability_status === 'owned_not_clausulable') availabilityText = '🔒 No Clausulable (Tuyo)';
+    else if (player.availability_status === 'owned_other') availabilityText = '👤 Otro manager';
+    
+    let summary = '';
+    
+    if (position) {
+      summary += `#${position}. ${player.name || 'N/A'}\n`;
+    } else {
+      summary += `${player.name || 'N/A'}\n`;
+      summary += '='.repeat(60) + '\n';
+    }
+    
+    summary += `   📈 Score: ${(player.score || 0).toFixed(2)}\n`;
+    summary += `   💰 Precio a pagar: €${(player.price_to_pay || 0).toLocaleString('es-ES')}\n`;
+    summary += `   📦 Disponibilidad: ${availabilityText}\n`;
+    
+    // 📊 TENDENCIAS: Mostrar AMBAS (reciente es más importante)
+    if (player.trend_recent_3d != null) {
+      summary += `   📊 Tendencia reciente (3d): ${(player.trend_recent_3d || 0).toFixed(2)}%/día\n`;
+    }
+    summary += `   📊 Tendencia histórica (10d): ${(player.trend_future || 0).toFixed(2)}%/día\n`;
+    
+    // 🔥 NUEVO: Mostrar cambio último día si está disponible
+    if (player.last_daily_change != null) {
+      const changeMill = (player.last_daily_change / 1000000).toFixed(2);
+      const changeSign = player.last_daily_change >= 0 ? '+' : '';
+      summary += `   📈 Cambio último día: ${changeSign}€${changeMill}M\n`;
+    }
+    
+    summary += `   💎 Infravaloración: ${((player.undervalue_factor || 0) * 100).toFixed(0)}%\n`;
+    summary += `   ⚡ Momentum: ${((player.momentum || 0) * 100).toFixed(0)}%\n`;
+    summary += `   👤 Titular próxima jornada: ${((player.titular_next_jor || 0) * 100).toFixed(0)}%\n`;
+    summary += `   🎯 Factor contexto: ${(player.context_factor || 0).toFixed(2)}x\n`;
+    summary += `   📉 Volatilidad: ${(player.volatility || 0).toFixed(2)}%\n`;
+    summary += `   ⚠️ Riesgo: ${(player.risk_level_num || 0).toFixed(1)}/5\n`;
+    summary += `   🏟️ Equipo: ${player.team_name || 'N/A'}\n`;
+    
+    // 📅 Mejorar el formato del próximo rival
+    const nextRival = player.next_opponent || 'Sin rival definido';
+    const location = player.next_location === 'home' ? '🏠 Casa' : player.next_location === 'away' ? '✈️ Fuera' : '❓ Desconocido';
+    summary += `   📅 Próximo rival: ${nextRival} (${location})\n`;
+    
+    summary += `   💵 Oferta sugerida: €${(player.suggested_bid || 0).toLocaleString('es-ES')}\n`;
+    
+    if (player.catalyst && player.catalyst.has_catalyst) {
+      const bonusPercent = Math.round((player.catalyst.bonus || 0) * 100);
+      summary += `   ⚡ CATALIZADOR: ${player.catalyst.reasoning} (+${bonusPercent}%)\n`;
+    }
+    if (player.bubble && player.bubble.is_bubble) {
+      const penaltyPercent = Math.abs(Math.round((player.bubble.penalty || 0) * 100));
+      summary += `   ⚠️ BURBUJA: ${player.bubble.reasoning} (-${penaltyPercent}%)\n`;
+    }
+    
+    if (!position) {
+      summary += '\n' + '='.repeat(60) + '\n';
+      summary += `Generado: ${new Date().toLocaleString('es-ES')}\n`;
+      summary += `Tu dinero disponible: €${(money || 0).toLocaleString('es-ES')}\n`;
+    }
+    
+    summary += '\n';
     return summary;
   };
 
@@ -269,6 +316,27 @@ export default function RecommendationsPage() {
       toast({
         title: '✅ Copiado al portapapeles',
         description: 'El resumen del Top 10 se ha copiado correctamente',
+        status: 'success',
+        duration: 2000,
+        isClosable: true,
+      });
+    }).catch(() => {
+      toast({
+        title: '❌ Error al copiar',
+        description: 'No se pudo copiar al portapapeles',
+        status: 'error',
+        duration: 2000,
+        isClosable: true,
+      });
+    });
+  };
+
+  const handleCopyPlayer = (player) => {
+    const playerSummary = generatePlayerSummary(player);
+    navigator.clipboard.writeText(playerSummary).then(() => {
+      toast({
+        title: '✅ Jugador copiado',
+        description: `Información de ${player.name} copiada al portapapeles`,
         status: 'success',
         duration: 2000,
         isClosable: true,
@@ -320,6 +388,27 @@ export default function RecommendationsPage() {
             <Text as='span' color='teal.600'>
               €{money.toLocaleString('es-ES')}
             </Text>
+          </Text>
+        </Box>
+      )}
+
+      {/* 🔍 Indicador de búsqueda activa */}
+      {isSearchActive && (
+        <Box mb={4} p={3} bg='blue.50' _dark={{ bg: 'blue.900' }} borderRadius='lg' border='1px solid' borderColor='blue.200'>
+          <HStack spacing={2}>
+            <Text fontSize='sm'>
+              🔍 <strong>{filteredCount}</strong> resultado{filteredCount !== 1 ? 's' : ''} encontrado{filteredCount !== 1 ? 's' : ''} de <strong>{totalPlayers}</strong> jugadores
+            </Text>
+            <Badge colorScheme='blue' fontSize='xs'>Búsqueda activa</Badge>
+          </HStack>
+        </Box>
+      )}
+      
+      {/* ℹ️ Indicador de vista top 10 */}
+      {!isSearchActive && !loading && data.length > 0 && (
+        <Box mb={4} p={2} bg='gray.50' _dark={{ bg: 'gray.800' }} borderRadius='md' border='1px solid' borderColor='gray.200'>
+          <Text fontSize='xs' color='gray.600' _dark={{ color: 'gray.400' }}>
+            📊 Mostrando <strong>Top {data.length}</strong> de {totalPlayers} jugadores. Usa el buscador para encontrar cualquier jugador.
           </Text>
         </Box>
       )}
@@ -422,6 +511,7 @@ export default function RecommendationsPage() {
                 <Th textAlign='center'>Δ Valor</Th>
                 <Th textAlign='center'>Riesgo</Th>
                 <Th textAlign='center'>Recomendación</Th>
+                <Th textAlign='center'>Acciones</Th>
               </>
             ) : mode === 'market' ? (
               <>
@@ -436,8 +526,8 @@ export default function RecommendationsPage() {
                   </Tooltip>
                 </Th>
                 <Th textAlign='center'>
-                  <Tooltip label='Tendencia futura del valor (regresión). Positiva sube, negativa baja'>
-                    <Text as='span'>Tendencia</Text>
+                  <Tooltip label='Tendencia RECIENTE del valor (últimos 3 días). Pasa el cursor para ver tendencia histórica (10 días)'>
+                    <Text as='span'>Tendencia 📊</Text>
                   </Tooltip>
                 </Th>
                 <Th textAlign='center'>
@@ -470,6 +560,11 @@ export default function RecommendationsPage() {
                     <Text as='span'>Riesgo</Text>
                   </Tooltip>
                 </Th>
+                <Th textAlign='center'>
+                  <Tooltip label='Exportar información del jugador'>
+                    <Text as='span'>Acciones</Text>
+                  </Tooltip>
+                </Th>
               </>
             ) : (
               <>
@@ -478,6 +573,7 @@ export default function RecommendationsPage() {
                 <Th textAlign='center'>Momentum</Th>
                 <Th textAlign='center'>Score</Th>
                 <Th textAlign='center'>Riesgo</Th>
+                <Th textAlign='center'>Acciones</Th>
               </>
             )}
           </Tr>
@@ -500,7 +596,7 @@ export default function RecommendationsPage() {
                   <Td textAlign='center'>
                     <MomentumBadge momentum={p.momentum} />
                   </Td>
-                  <Td textAlign='center'><TrendBadge trend={p.trend_future} lastDailyChange={p.last_daily_change} /></Td>
+                  <Td textAlign='center'><TrendBadge trend={p.trend_future} lastDailyChange={p.last_daily_change} trendRecent={p.trend_recent_3d} /></Td>
                   <Td textAlign='center'><VolatilityBadge v={p.volatility} /></Td>
                   <Td textAlign='center'>
                     <Badge colorScheme={p.market_delta?.includes('+') ? 'green' : 'red'}>
@@ -509,6 +605,18 @@ export default function RecommendationsPage() {
                   </Td>
                   <Td textAlign='center'><RiskBadge value={p.risk_level_num} /></Td>
                   <Td textAlign='center'><Badge colorScheme={reco.color}>{reco.label}</Badge></Td>
+                  <Td textAlign='center'>
+                    <Tooltip label='Copiar información del jugador'>
+                      <IconButton
+                        icon={<CopyIcon />}
+                        size='sm'
+                        variant='ghost'
+                        colorScheme='blue'
+                        aria-label='Copiar jugador'
+                        onClick={() => handleCopyPlayer(p)}
+                      />
+                    </Tooltip>
+                  </Td>
                 </Tr>
               );
             }
@@ -549,8 +657,12 @@ export default function RecommendationsPage() {
                       </Tooltip>
                     </Td>
                     <Td textAlign='center'>
-                      <Tooltip label={`Tendencia futura del valor: ${(p.trend_future ?? 0).toFixed(2)}% (positiva sube, negativa baja)`}>
-                        <Text as='span'><TrendBadge trend={p.trend_future} lastDailyChange={p.last_daily_change} /></Text>
+                      <Tooltip label={
+                        p.trend_recent_3d != null 
+                          ? `Tendencia reciente (3d): ${(p.trend_recent_3d ?? 0).toFixed(2)}%/día | Histórica (10d): ${(p.trend_future ?? 0).toFixed(2)}%/día`
+                          : `Tendencia del valor (10d): ${(p.trend_future ?? 0).toFixed(2)}%/día`
+                      }>
+                        <Text as='span'><TrendBadge trend={p.trend_future} lastDailyChange={p.last_daily_change} trendRecent={p.trend_recent_3d} /></Text>
                       </Tooltip>
                     </Td>
                     <Td textAlign='center'>
@@ -601,6 +713,18 @@ export default function RecommendationsPage() {
                         <Text as='span'><RiskBadge value={p.risk_level_num} /></Text>
                       </Tooltip>
                     </Td>
+                    <Td textAlign='center'>
+                      <Tooltip label='Copiar información del jugador'>
+                        <IconButton
+                          icon={<CopyIcon />}
+                          size='sm'
+                          variant='ghost'
+                          colorScheme='blue'
+                          aria-label='Copiar jugador'
+                          onClick={() => handleCopyPlayer(p)}
+                        />
+                      </Tooltip>
+                    </Td>
                   </>
                 ) : (
                   <>
@@ -627,6 +751,18 @@ export default function RecommendationsPage() {
                     </Td>
                     <Td textAlign='center'>
                       <RiskBadge value={p.risk_level_num} />
+                    </Td>
+                    <Td textAlign='center'>
+                      <Tooltip label='Copiar información del jugador'>
+                        <IconButton
+                          icon={<CopyIcon />}
+                          size='sm'
+                          variant='ghost'
+                          colorScheme='blue'
+                          aria-label='Copiar jugador'
+                          onClick={() => handleCopyPlayer(p)}
+                        />
+                      </Tooltip>
                     </Td>
                   </>
                 )}
